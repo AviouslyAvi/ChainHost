@@ -98,6 +98,7 @@ target_compile_definitions(ChainHost PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=1
+    CHAINHOST_VERSION="${PROJECT_VERSION}"
 )
 
 target_link_libraries(ChainHost

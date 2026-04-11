@@ -21,7 +21,8 @@ void ChainGraph::init (juce::AudioProcessorGraph& graph)
 
 juce::AudioProcessorGraph::NodeID ChainGraph::addPlugin (
     juce::AudioProcessorGraph& graph, PluginScanner& scanner,
-    const juce::PluginDescription& desc, int chainIndex, int position)
+    const juce::PluginDescription& desc, int chainIndex, int position,
+    const juce::String& uid)
 {
     if (chainIndex < 0 || chainIndex >= (int) chains.size())
         return {};
@@ -32,14 +33,23 @@ juce::AudioProcessorGraph::NodeID ChainGraph::addPlugin (
     if (! instance) return {};
 
     auto pluginNodeId = graph.addNode (std::move (instance))->nodeID;
+    auto* pluginNode = graph.getNodeForId (pluginNodeId);
+    int numChans = pluginNode->getProcessor()->getTotalNumInputChannels();
 
     // Shared buffer links the DryCapture (before plugin) to the DryWet (after plugin)
     auto sharedDry = std::make_shared<SharedDryBuffer>();
-    sharedDry->prepare (2, graph.getBlockSize());
-    auto dcNodeId = graph.addNode (std::make_unique<DryCaptureProcessor> (sharedDry))->nodeID;
-    auto dwNodeId = graph.addNode (std::make_unique<DryWetProcessor> (sharedDry))->nodeID;
+    sharedDry->prepare (numChans, graph.getBlockSize());
+    
+    auto dc = std::make_unique<DryCaptureProcessor> (sharedDry);
+    dc->setPlayConfigDetails (numChans, numChans, graph.getSampleRate(), graph.getBlockSize());
+    auto dcNodeId = graph.addNode (std::move (dc))->nodeID;
+
+    auto dw = std::make_unique<DryWetProcessor> (sharedDry);
+    dw->setPlayConfigDetails (numChans, numChans, graph.getSampleRate(), graph.getBlockSize());
+    auto dwNodeId = graph.addNode (std::move (dw))->nodeID;
 
     PluginSlot slot;
+    slot.uid = uid.isEmpty() ? juce::Uuid().toString() : uid;
     slot.nodeId = pluginNodeId;
     slot.dryCaptureNodeId = dcNodeId;
     slot.dryWetNodeId = dwNodeId;
@@ -166,7 +176,22 @@ void ChainGraph::setChainVolume (juce::AudioProcessorGraph& graph, int chainInde
     chains[(size_t) chainIndex].volume = volume;
     if (auto* node = graph.getNodeForId (chains[(size_t) chainIndex].gainNodeId))
         if (auto* gain = dynamic_cast<GainProcessor*> (node->getProcessor()))
-            gain->setGain (volume);
+            gain->setGain (chains[(size_t) chainIndex].muted ? 0.0f : volume);
+}
+
+void ChainGraph::setChainMuted (juce::AudioProcessorGraph& graph, int chainIndex, bool muted)
+{
+    if (chainIndex < 0 || chainIndex >= (int) chains.size()) return;
+    chains[(size_t) chainIndex].muted = muted;
+    if (auto* node = graph.getNodeForId (chains[(size_t) chainIndex].gainNodeId))
+        if (auto* gain = dynamic_cast<GainProcessor*> (node->getProcessor()))
+            gain->setGain (muted ? 0.0f : chains[(size_t) chainIndex].volume);
+}
+
+bool ChainGraph::isChainMuted (int chainIndex) const
+{
+    if (chainIndex < 0 || chainIndex >= (int) chains.size()) return false;
+    return chains[(size_t) chainIndex].muted;
 }
 
 bool ChainGraph::findSlot (juce::AudioProcessorGraph::NodeID nodeId, int& ci, int& si) const
@@ -176,6 +201,14 @@ bool ChainGraph::findSlot (juce::AudioProcessorGraph::NodeID nodeId, int& ci, in
             if (chains[(size_t) c].slots[(size_t) s].nodeId == nodeId)
             { ci = c; si = s; return true; }
     return false;
+}
+
+juce::AudioProcessorGraph::NodeID ChainGraph::getNodeIdForUid (const juce::String& uid) const
+{
+    for (auto& chain : chains)
+        for (auto& slot : chain.slots)
+            if (slot.uid == uid) return slot.nodeId;
+    return {};
 }
 
 PluginSlot* ChainGraph::findSlotMutable (juce::AudioProcessorGraph::NodeID nodeId)
@@ -260,7 +293,7 @@ void ChainGraph::connectNodes (juce::AudioProcessorGraph& graph,
         auto* dstNode = graph.getNodeForId (dst);
         if (! srcNode || ! dstNode) return;
         int chans = juce::jmin (srcNode->getProcessor()->getTotalNumOutputChannels(),
-                                dstNode->getProcessor()->getTotalNumInputChannels(), 2);
+                                dstNode->getProcessor()->getTotalNumInputChannels());
         for (int ch = 0; ch < chans; ++ch)
             graph.addConnection ({ { src, ch }, { dst, ch } });
     }
@@ -274,12 +307,14 @@ std::unique_ptr<juce::XmlElement> ChainGraph::toXml (juce::AudioProcessorGraph& 
     {
         auto* chainXml = xml->createNewChildElement ("Chain");
         chainXml->setAttribute ("volume", (double) chain.volume);
+        chainXml->setAttribute ("muted", chain.muted);
 
         for (auto& slot : chain.slots)
         {
             if (auto* node = graph.getNodeForId (slot.nodeId))
             {
                 auto* pluginXml = chainXml->createNewChildElement ("Plugin");
+                pluginXml->setAttribute ("uid", slot.uid);
                 pluginXml->setAttribute ("bypassed", slot.bypassed);
                 pluginXml->setAttribute ("dryWet", (double) slot.dryWet);
 
@@ -305,6 +340,7 @@ void ChainGraph::fromXml (const juce::XmlElement& xml, juce::AudioProcessorGraph
     {
         int ci = addParallelChain (graph);
         setChainVolume (graph, ci, (float) chainXml->getDoubleAttribute ("volume", 1.0));
+        setChainMuted (graph, ci, chainXml->getBoolAttribute ("muted", false));
 
         for (auto* pluginXml : chainXml->getChildWithTagNameIterator ("Plugin"))
         {
@@ -312,7 +348,9 @@ void ChainGraph::fromXml (const juce::XmlElement& xml, juce::AudioProcessorGraph
             {
                 juce::PluginDescription desc;
                 desc.loadFromXml (*descXml);
-                auto nodeId = addPlugin (graph, scanner, desc, ci);
+                
+                auto uid = pluginXml->getStringAttribute ("uid");
+                auto nodeId = addPlugin (graph, scanner, desc, ci, -1, uid);
 
                 if (nodeId != juce::AudioProcessorGraph::NodeID())
                 {

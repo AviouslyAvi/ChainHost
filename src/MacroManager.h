@@ -1,9 +1,11 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 
+class ChainGraph;
+
 struct MacroMapping
 {
-    juce::AudioProcessorGraph::NodeID nodeId;
+    juce::String slotUid;
     int paramIndex;
     float minValue;
     float maxValue;
@@ -16,14 +18,17 @@ public:
 
     MacroManager() = default;
 
-    void addMapping (int macroIndex, juce::AudioProcessorGraph::NodeID nodeId,
+    void addMapping (int macroIndex, const juce::String& slotUid,
                      int paramIndex, float minVal, float maxVal);
-    void removeMapping (int macroIndex, juce::AudioProcessorGraph::NodeID nodeId, int paramIndex);
+    void removeMapping (int macroIndex, const juce::String& slotUid, int paramIndex);
     void clearMappings (int macroIndex);
-    void removeMappingsForNode (juce::AudioProcessorGraph::NodeID nodeId);
+    void removeMappingsForUid (const juce::String& slotUid);
 
     void setMacroValue (int macroIndex, float normalisedValue,
-                        juce::AudioProcessorGraph& graph);
+                        juce::AudioProcessorGraph& graph,
+                        const ChainGraph& chainGraph);
+
+    float getLastValue (int macroIndex) const { return lastValue[juce::jlimit (0, numMacros - 1, macroIndex)]; }
 
     const std::vector<MacroMapping>& getMappings (int macroIndex) const;
 
@@ -32,4 +37,6 @@ public:
 
 private:
     std::vector<MacroMapping> mappings[numMacros];
+    float lastValue[numMacros] = {};
+    juce::CriticalSection lock;
 };

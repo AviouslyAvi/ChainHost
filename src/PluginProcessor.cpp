@@ -37,7 +37,7 @@ void ChainHostProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         chainGraph.init (graph);
 
     graph.prepareToPlay (sampleRate, samplesPerBlock);
-    lfoEngine.start (macroManager, graph);
+    lfoEngine.start (macroManager, graph, chainGraph);
 }
 
 void ChainHostProcessor::releaseResources()
@@ -47,6 +47,14 @@ void ChainHostProcessor::releaseResources()
 
 void ChainHostProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    // Feed host BPM to LFO engine for sync mode
+    if (auto* ph = getPlayHead())
+    {
+        auto pos = ph->getPosition();
+        if (pos.hasValue() && pos->getBpm().hasValue())
+            lfoEngine.setHostBpm ((float) *pos->getBpm());
+    }
+
     graph.processBlock (buffer, midiMessages);
 }
 
@@ -107,7 +115,7 @@ void ChainHostProcessor::setStateInformation (const void* data, int sizeInBytes)
 void ChainHostProcessor::parameterValueChanged (int parameterIndex, float newValue)
 {
     if (parameterIndex >= 0 && parameterIndex < MacroManager::numMacros)
-        macroManager.setMacroValue (parameterIndex, newValue, graph);
+        macroManager.setMacroValue (parameterIndex, newValue, graph, chainGraph);
 }
 
 juce::File ChainHostProcessor::getPresetsDirectory()

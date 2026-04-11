@@ -19,6 +19,13 @@ public:
         buffer.applyGain (gain.load());
     }
 
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override
+    {
+        if (layouts.getMainInputChannelSet() != layouts.getMainOutputChannelSet())
+            return false;
+        return ! layouts.getMainInputChannelSet().isDisabled();
+    }
+
     double getTailLengthSeconds() const override { return 0.0; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
@@ -67,7 +74,7 @@ public:
     void prepareToPlay (double sr, int bs) override
     {
         juce::ignoreUnused (sr);
-        if (sharedDry) sharedDry->prepare (2, bs);
+        if (sharedDry) sharedDry->prepare (getTotalNumInputChannels(), bs);
     }
     void releaseResources() override {}
 
@@ -80,6 +87,13 @@ public:
         for (int c = 0; c < ch; ++c)
             dry.copyFrom (c, 0, buffer, c, 0, n);
         // Audio passes through unmodified
+    }
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override
+    {
+        if (layouts.getMainInputChannelSet() != layouts.getMainOutputChannelSet())
+            return false;
+        return ! layouts.getMainInputChannelSet().isDisabled();
     }
 
     double getTailLengthSeconds() const override { return 0.0; }
@@ -115,7 +129,7 @@ public:
     void prepareToPlay (double sr, int bs) override
     {
         juce::ignoreUnused (sr);
-        if (sharedDry) sharedDry->prepare (2, bs);
+        if (sharedDry) sharedDry->prepare (getTotalNumInputChannels(), bs);
     }
     void releaseResources() override {}
 
@@ -144,6 +158,13 @@ public:
         }
     }
 
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override
+    {
+        if (layouts.getMainInputChannelSet() != layouts.getMainOutputChannelSet())
+            return false;
+        return ! layouts.getMainInputChannelSet().isDisabled();
+    }
+
     void setWet (float w) { wet.store (juce::jlimit (0.0f, 1.0f, w)); }
     float getWet() const { return wet.load(); }
 
@@ -168,6 +189,7 @@ private:
 // Per-slot info
 struct PluginSlot
 {
+    juce::String uid;
     juce::AudioProcessorGraph::NodeID nodeId;
     juce::AudioProcessorGraph::NodeID dryCaptureNodeId; // DryCaptureProcessor before this plugin
     juce::AudioProcessorGraph::NodeID dryWetNodeId;     // DryWetProcessor after this plugin
@@ -180,6 +202,7 @@ struct ParallelChain
     juce::AudioProcessorGraph::NodeID gainNodeId;
     std::vector<PluginSlot> slots;
     float volume = 1.0f;
+    bool muted = false;
 };
 
 class ChainGraph
@@ -194,7 +217,8 @@ public:
         PluginScanner& scanner,
         const juce::PluginDescription& desc,
         int chainIndex = 0,
-        int position = -1);
+        int position = -1,
+        const juce::String& uid = {});
 
     void removePlugin (juce::AudioProcessorGraph& graph,
                        juce::AudioProcessorGraph::NodeID nodeId);
@@ -213,6 +237,8 @@ public:
     int addParallelChain (juce::AudioProcessorGraph& graph);
     void removeParallelChain (juce::AudioProcessorGraph& graph, int chainIndex);
     void setChainVolume (juce::AudioProcessorGraph& graph, int chainIndex, float volume);
+    void setChainMuted (juce::AudioProcessorGraph& graph, int chainIndex, bool muted);
+    bool isChainMuted (int chainIndex) const;
 
     void rebuildConnections (juce::AudioProcessorGraph& graph);
 
@@ -220,6 +246,7 @@ public:
     const ParallelChain& getChain (int index) const { return chains[(size_t) index]; }
 
     bool findSlot (juce::AudioProcessorGraph::NodeID nodeId, int& chainIndex, int& slotIndex) const;
+    juce::AudioProcessorGraph::NodeID getNodeIdForUid (const juce::String& uid) const;
 
     std::unique_ptr<juce::XmlElement> toXml (juce::AudioProcessorGraph& graph) const;
     void fromXml (const juce::XmlElement& xml, juce::AudioProcessorGraph& graph,

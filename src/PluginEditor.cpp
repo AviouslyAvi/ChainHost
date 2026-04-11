@@ -1,5 +1,9 @@
 #include "PluginEditor.h"
 
+#ifndef CHAINHOST_VERSION
+#define CHAINHOST_VERSION "0.0.0"
+#endif
+
 //==============================================================================
 // ChainHostLookAndFeel — override Gin's Copper palette with our warm amber
 //==============================================================================
@@ -64,17 +68,17 @@ void FabKnob::paint (juce::Graphics& g)
     if (showPercentage)
     {
         float norm = (float) slider.getValue();
-        if (slider.getMaximum() > 1.1)  // non-normalised range (e.g. LFO rate)
+        if (slider.getMaximum() > 1.1)
         {
-            g.setColour (Colors::text.withAlpha (0.8f));
-            g.setFont (juce::Font (juce::FontOptions (9.0f)));
+            g.setColour (Colors::text.withAlpha (0.75f));
+            g.setFont (juce::Font (juce::FontOptions (8.5f)));
             auto valStr = juce::String (slider.getValue(), 2) + suffix;
             g.drawText (valStr, 0, slider.getBottom(), getWidth(), 12, juce::Justification::centred);
         }
         else
         {
-            g.setColour (Colors::text.withAlpha (0.8f));
-            g.setFont (juce::Font (juce::FontOptions (9.0f)));
+            g.setColour (Colors::text.withAlpha (0.75f));
+            g.setFont (juce::Font (juce::FontOptions (8.5f)));
             g.drawText (juce::String (juce::roundToInt (norm * 100.0f)) + suffix,
                         0, slider.getBottom(), getWidth(), 12, juce::Justification::centred);
         }
@@ -82,15 +86,29 @@ void FabKnob::paint (juce::Graphics& g)
 
     if (label.isNotEmpty())
     {
-        g.setColour (Colors::textDim);
-        g.setFont (juce::Font (juce::FontOptions (8.5f)));
-        g.drawText (label, 0, getHeight() - 12, getWidth(), 12, juce::Justification::centred);
+        g.setColour (Colors::textDim.withAlpha (0.7f));
+        g.setFont (juce::Font (juce::FontOptions (7.5f).withStyle ("Bold")));
+        g.drawText (label.toUpperCase(), 0, getHeight() - 11, getWidth(), 11, juce::Justification::centred);
+    }
+
+    // Drop hover — LFO assignment glow
+    if (dropHover)
+    {
+        g.setColour (Colors::lfoBlue.withAlpha (0.12f));
+        g.fillRect (getLocalBounds());
+        g.setColour (Colors::lfoBlue.withAlpha (0.6f));
+        g.drawRect (getLocalBounds(), 2);
+        // "LFO" label overlay
+        g.setColour (Colors::lfoBlue.withAlpha (0.8f));
+        g.setFont (juce::Font (juce::FontOptions (9.0f).withStyle ("Bold")));
+        g.drawText ("LFO", getLocalBounds().removeFromTop (16), juce::Justification::centred);
     }
 }
 
 void FabKnob::setValue (float v, bool notify)
 {
     slider.setValue (v, notify ? juce::sendNotificationAsync : juce::dontSendNotification);
+    if (! notify) repaint();  // still update visuals when skipping callbacks
 }
 
 float FabKnob::getValue() const { return (float) slider.getValue(); }
@@ -105,6 +123,18 @@ void FabKnob::setArcColour (juce::Colour c)
     arcColour = c;
     slider.setColour (juce::Slider::rotarySliderFillColourId, c);
     repaint();
+}
+
+bool FabKnob::isInterestedInDragSource (const SourceDetails&)
+{
+    return onDrop != nullptr;
+}
+
+void FabKnob::itemDropped (const SourceDetails& details)
+{
+    dropHover = false;
+    repaint();
+    if (onDrop) onDrop (details.description);
 }
 
 //==============================================================================
@@ -190,32 +220,49 @@ void PluginSlotComponent::paint (juce::Graphics& g)
     bool isBypassed = proc.getChainGraph().isSlotBypassed (nodeId);
     auto bounds = getLocalBounds().toFloat().reduced (2);
 
-    // Flat slot background — Ableton rack style
-    g.setColour (isBypassed ? Colors::slotBg : Colors::surfaceRaised);
+    // Slot background with subtle top-to-bottom gradient
+    auto bgTop = isBypassed ? Colors::slotBg : Colors::surfaceRaised;
+    auto bgBot = isBypassed ? Colors::slotBg.darker (0.1f) : Colors::surfaceRaised.darker (0.15f);
+    g.setGradientFill (juce::ColourGradient (bgTop, 0, bounds.getY(), bgBot, 0, bounds.getBottom(), false));
     g.fillRect (bounds);
 
-    // 1px border
-    g.setColour (isBypassed ? Colors::borderSubtle : Colors::slotBorder);
+    // Border — brighter when active
+    g.setColour (isBypassed ? Colors::borderSubtle : Colors::slotBorder.brighter (0.1f));
     g.drawRect (bounds, 1.0f);
 
-    // Left accent bar when active
-    if (!isBypassed)
+    // Left accent bar — glowing when active
+    if (! isBypassed)
     {
         g.setColour (Colors::accent);
         g.fillRect (bounds.getX(), bounds.getY(), 3.0f, bounds.getHeight());
+        // Soft glow bleed from accent bar
+        g.setGradientFill (juce::ColourGradient (
+            Colors::accent.withAlpha (0.08f), bounds.getX() + 3, bounds.getCentreY(),
+            Colors::accent.withAlpha (0.0f), bounds.getX() + 20, bounds.getCentreY(), false));
+        g.fillRect (bounds.getX() + 3, bounds.getY(), 17.0f, bounds.getHeight());
+    }
+
+    // Bordered square around ON button
+    auto btnBounds = bypassButton.getBounds().toFloat().expanded (2);
+    g.setColour (isBypassed ? Colors::borderSubtle : Colors::bypass.withAlpha (0.3f));
+    g.drawRect (btnBounds, 1.0f);
+    if (! isBypassed)
+    {
+        g.setColour (Colors::bypass.withAlpha (0.06f));
+        g.fillRect (btnBounds);
     }
 
     // Drop hover
     if (dragHover)
     {
-        g.setColour (Colors::accent.withAlpha (0.1f));
+        g.setColour (Colors::accent.withAlpha (0.08f));
         g.fillRect (bounds);
-        g.setColour (Colors::accent.withAlpha (0.6f));
+        g.setColour (Colors::accent.withAlpha (0.5f));
         g.drawRect (bounds, 2.0f);
     }
 
-    // Drag grip (flat squares instead of dots)
-    g.setColour (Colors::textDim.withAlpha (0.2f));
+    // Drag grip dots
+    g.setColour (Colors::textDim.withAlpha (0.18f));
     for (int dy = 0; dy < 3; ++dy)
         for (int dx = 0; dx < 2; ++dx)
             g.fillRect (bounds.getX() + 5 + dx * 4, bounds.getY() + 26 + dy * 4, 2.0f, 2.0f);
@@ -223,11 +270,11 @@ void PluginSlotComponent::paint (juce::Graphics& g)
 
 void PluginSlotComponent::resized()
 {
-    auto b = getLocalBounds().reduced (4);
-    bypassButton.setBounds (b.getX() + 6, b.getY() + 4, 28, 16);
-    nameLabel.setBounds (b.getX() + 38, b.getY() + 4, b.getWidth() - 60, 18);
-    removeButton.setBounds (b.getRight() - 22, b.getY() + 3, 20, 18);
-    dryWetKnob.setBounds (b.getRight() - 56, b.getY() + 22, 50, 54);
+    auto b = getLocalBounds().reduced (2);
+    bypassButton.setBounds (b.getX() + 4, b.getY() + 4, 26, 14);
+    nameLabel.setBounds (b.getX() + 34, b.getY() + 3, b.getWidth() - 54, 16);
+    removeButton.setBounds (b.getRight() - 18, b.getY() + 2, 16, 16);
+    dryWetKnob.setBounds (b.getRight() - 48, b.getY() + 20, 44, 44);
 }
 
 void PluginSlotComponent::mouseDown (const juce::MouseEvent& e)
@@ -380,17 +427,29 @@ MappingPanel::MappingPanel (ChainHostProcessor& p) : proc (p)
 void MappingPanel::paint (juce::Graphics& g)
 {
     g.fillAll (Colors::bgDeep);
-    g.setColour (Colors::textDim);
-    g.setFont (juce::Font (juce::FontOptions (9.5f)));
-    g.drawText ("MACRO MAPPING", 10, 6, 100, 12, juce::Justification::centredLeft);
-    if (isLearning()) {
-        g.setColour (Colors::learn.withAlpha (0.8f));
-        g.setFont (juce::Font (juce::FontOptions (10.0f)));
+
+    // Section label with accent dot
+    g.setColour (Colors::accent.withAlpha (0.5f));
+    g.fillRect (6, 10, 3, 3);
+    g.setColour (Colors::textDim.withAlpha (0.7f));
+    g.setFont (juce::Font (juce::FontOptions (8.0f).withStyle ("Bold")));
+    g.drawText ("MACRO MAPPING", 12, 6, 100, 12, juce::Justification::centredLeft);
+
+    if (isLearning())
+    {
+        // Pulsing learn indicator
+        g.setColour (Colors::learn.withAlpha (0.7f));
+        g.setFont (juce::Font (juce::FontOptions (9.5f)));
         g.drawText ("Move a parameter on any loaded plugin...", 10, 50, getWidth() - 20, 16, juce::Justification::centredLeft);
-    } else if (mappingRows.isEmpty()) {
-        g.setColour (Colors::textDim.withAlpha (0.4f));
-        g.setFont (juce::Font (juce::FontOptions (10.0f)));
-        g.drawText ("No mappings. Use + MAP or LEARN.", 10, 50, getWidth() - 20, 16, juce::Justification::centredLeft);
+        // Animated border flash (subtle)
+        g.setColour (Colors::learn.withAlpha (0.15f));
+        g.drawRect (getLocalBounds().reduced (2), 1);
+    }
+    else if (mappingRows.isEmpty())
+    {
+        g.setColour (Colors::textDim.withAlpha (0.3f));
+        g.setFont (juce::Font (juce::FontOptions (9.0f)));
+        g.drawText ("No mappings. Click + MAP or LEARN to assign.", 10, 50, getWidth() - 20, 16, juce::Justification::centredLeft);
     }
 }
 
@@ -425,9 +484,10 @@ void MappingPanel::refresh()
     for (auto& m : proc.getMacroManager().getMappings (selectedMacro))
     {
         auto* row = mappingRows.add (new MappingRow());
-        row->nodeId = m.nodeId; row->paramIndex = m.paramIndex;
+        row->slotUid = m.slotUid; row->paramIndex = m.paramIndex;
         juce::String pName = "?", plugName = "?";
-        if (auto* node = proc.getGraph().getNodeForId (m.nodeId)) {
+        auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+        if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
             plugName = node->getProcessor()->getName();
             auto& params = node->getProcessor()->getParameters();
             if (m.paramIndex < params.size()) pName = params[m.paramIndex]->getName (28);
@@ -440,17 +500,17 @@ void MappingPanel::refresh()
         row->minKnob.setValue (m.minValue, false); row->minKnob.setShowPercentage (true);
         row->maxKnob.setValue (m.maxValue, false); row->maxKnob.setShowPercentage (true);
         row->minKnob.onValueChange = row->maxKnob.onValueChange =
-            [this, nid = m.nodeId, pi = m.paramIndex, &r = *row]() {
-                proc.getMacroManager().removeMapping (selectedMacro, nid, pi);
-                proc.getMacroManager().addMapping (selectedMacro, nid, pi, r.minKnob.getValue(), r.maxKnob.getValue());
+            [this, uid = m.slotUid, pi = m.paramIndex, &r = *row]() {
+                proc.getMacroManager().removeMapping (selectedMacro, uid, pi);
+                proc.getMacroManager().addMapping (selectedMacro, uid, pi, r.minKnob.getValue(), r.maxKnob.getValue());
                 if (onMappingChanged) onMappingChanged();
             };
         addAndMakeVisible (row->minKnob); addAndMakeVisible (row->maxKnob);
 
         row->removeButton.setColour (juce::TextButton::buttonColourId, Colors::remove.withAlpha (0.3f));
         row->removeButton.setColour (juce::TextButton::textColourOffId, Colors::text);
-        row->removeButton.onClick = [this, nid = m.nodeId, pi = m.paramIndex]() {
-            proc.getMacroManager().removeMapping (selectedMacro, nid, pi);
+        row->removeButton.onClick = [this, uid = m.slotUid, pi = m.paramIndex]() {
+            proc.getMacroManager().removeMapping (selectedMacro, uid, pi);
             refresh(); if (onMappingChanged) onMappingChanged();
         };
         addAndMakeVisible (row->removeButton);
@@ -479,23 +539,58 @@ void MappingPanel::takeParamSnapshot() {
             if (auto* node = proc.getGraph().getNodeForId (slot.nodeId)) {
                 auto& params = node->getProcessor()->getParameters();
                 for (int pi = 0; pi < params.size(); ++pi)
-                    learnSnapshot.push_back ({ slot.nodeId, pi, params[pi]->getValue() });
+                    learnSnapshot.push_back ({ slot.uid, pi, params[pi]->getValue() });
             }
 }
 
 void MappingPanel::checkLearn() {
     if (learningMacroIndex < 0) return;
-    float bestDelta = 0; juce::AudioProcessorGraph::NodeID bestNode {}; int bestParam = -1;
+
+    // Build a set of parameters currently modulated by LFOs or macros so we can ignore them
+    auto isModulated = [&] (const juce::String& slotUid, int paramIndex) -> bool
+    {
+        // Check LFO targets
+        auto& lfoEngine = proc.getLfoEngine();
+        for (int li = 0; li < LfoEngine::numLfos; ++li)
+        {
+            auto& lfo = lfoEngine.getLfo (li);
+            if (! lfo.enabled) continue;
+            for (auto& t : lfo.targets)
+            {
+                if (t.type == LfoTarget::Parameter && t.slotUid == slotUid && t.paramIndex == paramIndex)
+                    return true;
+                // If LFO targets a macro, check that macro's mappings too
+                if (t.type == LfoTarget::Macro)
+                {
+                    for (auto& m : proc.getMacroManager().getMappings (t.macroIndex))
+                        if (m.slotUid == slotUid && m.paramIndex == paramIndex)
+                            return true;
+                }
+            }
+        }
+        // Check all macro mappings (macros may be automated by host or other sources)
+        for (int mi = 0; mi < MacroManager::numMacros; ++mi)
+            for (auto& m : proc.getMacroManager().getMappings (mi))
+                if (m.slotUid == slotUid && m.paramIndex == paramIndex)
+                    return true;
+        return false;
+    };
+
+    float bestDelta = 0; juce::String bestUid; int bestParam = -1;
     for (auto& snap : learnSnapshot)
-        if (auto* node = proc.getGraph().getNodeForId (snap.nodeId)) {
+    {
+        auto nodeId = proc.getChainGraph().getNodeIdForUid (snap.slotUid);
+        if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
+            if (isModulated (snap.slotUid, snap.paramIndex)) continue;
             auto& params = node->getProcessor()->getParameters();
             if (snap.paramIndex < params.size()) {
                 float d = std::abs (params[snap.paramIndex]->getValue() - snap.value);
-                if (d > bestDelta) { bestDelta = d; bestNode = snap.nodeId; bestParam = snap.paramIndex; }
+                if (d > bestDelta) { bestDelta = d; bestUid = snap.slotUid; bestParam = snap.paramIndex; }
             }
         }
+    }
     if (bestDelta > 0.05f && bestParam >= 0) {
-        proc.getMacroManager().addMapping (learningMacroIndex, bestNode, bestParam, 0.0f, 1.0f);
+        proc.getMacroManager().addMapping (learningMacroIndex, bestUid, bestParam, 0.0f, 1.0f);
         setSelectedMacro (learningMacroIndex); stopLearn(); refresh();
         if (onMappingChanged) onMappingChanged();
     }
@@ -504,7 +599,7 @@ void MappingPanel::checkLearn() {
 void MappingPanel::showParameterPicker() {
     juce::PopupMenu menu; auto& cg = proc.getChainGraph();
     int itemId = 1;
-    struct PI { juce::AudioProcessorGraph::NodeID n; int p; };
+    struct PI { juce::String uid; int p; };
     std::vector<PI> lookup;
     for (int ci = 0; ci < cg.getNumChains(); ++ci)
         for (auto& slot : cg.getChain (ci).slots)
@@ -512,7 +607,7 @@ void MappingPanel::showParameterPicker() {
                 auto& params = node->getProcessor()->getParameters();
                 if (params.isEmpty()) continue;
                 juce::PopupMenu sub;
-                for (int pi = 0; pi < params.size(); ++pi) { lookup.push_back ({slot.nodeId, pi}); sub.addItem (itemId++, params[pi]->getName (40)); }
+                for (int pi = 0; pi < params.size(); ++pi) { lookup.push_back ({slot.uid, pi}); sub.addItem (itemId++, params[pi]->getName (40)); }
                 auto lbl = node->getProcessor()->getName();
                 if (cg.getNumChains() > 1) lbl = "Chain " + juce::String (ci + 1) + " > " + lbl;
                 menu.addSubMenu (lbl, sub);
@@ -520,7 +615,7 @@ void MappingPanel::showParameterPicker() {
     if (itemId == 1) menu.addItem (-1, "(No plugins)", false, false);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (mapButton),
         [this, lookup] (int r) { if (r > 0 && r <= (int)lookup.size()) {
-            proc.getMacroManager().addMapping (selectedMacro, lookup[(size_t)(r-1)].n, lookup[(size_t)(r-1)].p, 0.0f, 1.0f);
+            proc.getMacroManager().addMapping (selectedMacro, lookup[(size_t)(r-1)].uid, lookup[(size_t)(r-1)].p, 0.0f, 1.0f);
             refresh(); if (onMappingChanged) onMappingChanged(); }});
 }
 
@@ -574,12 +669,70 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     depthKnob.onValueChange = [this]() { proc.getLfoEngine().getLfo (activeLfo).depth = depthKnob.getValue(); };
     addAndMakeVisible (depthKnob);
 
+    // BPM/Hz toggle — prominent mode switcher
+    syncToggle.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+    syncToggle.setColour (juce::TextButton::textColourOffId, Colors::lfoBlue);
+    syncToggle.onClick = [this]() {
+        auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
+        lfo.syncToHost = !lfo.syncToHost;
+        syncToggle.setButtonText (lfo.syncToHost ? "SYNC" : "FREE");
+        syncToggle.setColour (juce::TextButton::buttonColourId,
+            lfo.syncToHost ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
+        rateKnob.setVisible (!lfo.syncToHost);
+        divButton.setVisible (lfo.syncToHost);
+    };
+    addAndMakeVisible (syncToggle);
+
+    // Note division button (visible in BPM mode)
+    divButton.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.25f));
+    divButton.setColour (juce::TextButton::textColourOffId, Colors::text);
+    divButton.onClick = [this]() {
+        auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
+        juce::PopupMenu menu;
+        for (int d = 0; d < LfoEngine::numDivisions; ++d)
+            menu.addItem (d + 1, LfoEngine::divisionName (LfoEngine::divisions[d]),
+                          true, LfoEngine::divisions[d] == lfo.noteDivision);
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (divButton),
+            [this] (int r) {
+                if (r > 0) {
+                    auto& l = proc.getLfoEngine().getLfo (activeLfo);
+                    l.noteDivision = LfoEngine::divisions[r - 1];
+                    divButton.setButtonText (LfoEngine::divisionName (l.noteDivision));
+                }
+            });
+    };
+    divButton.setVisible (false);
+    addAndMakeVisible (divButton);
+
     addTargetButton.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.3f));
     addTargetButton.setColour (juce::TextButton::textColourOffId, Colors::text);
     addTargetButton.onClick = [this]() { showTargetMenu (activeLfo); };
     addAndMakeVisible (addTargetButton);
 
+    dragHandle.activeLfoPtr = &activeLfo;
+    addAndMakeVisible (dragHandle);
+
     refresh();
+}
+
+void LfoPanel::LfoDragHandle::paint (juce::Graphics& g)
+{
+    g.setColour (Colors::lfoBlue.withAlpha (0.4f));
+    g.fillRect (getLocalBounds());
+    g.setColour (Colors::lfoBlue.withAlpha (0.7f));
+    g.drawRect (getLocalBounds(), 1);
+    g.setColour (Colors::text);
+    g.setFont (juce::Font (juce::FontOptions (8.0f)));
+    g.drawText (juce::CharPointer_UTF8 ("DRAG \xe2\x86\x92 MACRO"), getLocalBounds(), juce::Justification::centred);
+}
+
+void LfoPanel::LfoDragHandle::mouseDown (const juce::MouseEvent&) {}
+
+void LfoPanel::LfoDragHandle::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.getDistanceFromDragStart() > 4 && activeLfoPtr != nullptr)
+        if (auto* dc = juce::DragAndDropContainer::findParentDragContainerFor (this))
+            dc->startDragging (juce::var ("lfo:" + juce::String (*activeLfoPtr)), this);
 }
 
 void LfoPanel::paint (juce::Graphics& g)
@@ -591,23 +744,30 @@ void LfoPanel::paint (juce::Graphics& g)
     // ── Waveform display ─────────────────────────────────────────
     auto wfBounds = juce::Rectangle<int> (10, 28, getWidth() / 2 - 140, 56);
 
-    // Dark inset background
+    // Dark inset background with subtle vignette
     {
-        g.setColour (juce::Colour (0xff0e0e18));
+        g.setColour (juce::Colour (0xff08080f));
+        g.fillRect (wfBounds);
+        // Top-edge inner shadow
+        g.setGradientFill (juce::ColourGradient (
+            juce::Colour (0x18000000), 0, (float) wfBounds.getY(),
+            juce::Colours::transparentBlack, 0, (float) wfBounds.getY() + 6, false));
         g.fillRect (wfBounds);
     }
 
-    // Grid lines (subtle)
-    g.setColour (juce::Colour (0x0cffffff));
-    float midY = wfBounds.getCentreY();
+    // Grid lines — fine crosshatch
+    g.setColour (juce::Colour (0x0affffff));
+    float midY = (float) wfBounds.getCentreY();
     g.drawLine ((float) wfBounds.getX(), midY, (float) wfBounds.getRight(), midY, 0.5f);
-    for (int q = 1; q <= 3; ++q)
+    // Quarter + eighth grid
+    for (int q = 1; q <= 7; ++q)
     {
-        float qx = wfBounds.getX() + (wfBounds.getWidth() * q) / 4.0f;
+        float qx = wfBounds.getX() + (wfBounds.getWidth() * q) / 8.0f;
+        g.setColour (juce::Colour ((q % 2 == 0) ? 0x0affffff : 0x05ffffff));
         g.drawLine (qx, (float) wfBounds.getY(), qx, (float) wfBounds.getBottom(), 0.5f);
     }
 
-    // Waveform fill (gradient under the curve)
+    // Waveform rendering — two-pass: fill then stroke
     {
         juce::Path wave;
         for (int x = 0; x <= wfBounds.getWidth(); ++x)
@@ -616,10 +776,10 @@ void LfoPanel::paint (juce::Graphics& g)
             float val = LfoEngine::waveformAt (lfo.shape, phase, 0.5f);
             float py = wfBounds.getY() + (1.0f - val) * wfBounds.getHeight();
             if (x == 0) wave.startNewSubPath ((float) (wfBounds.getX() + x), py);
-            else wave.lineTo ((float) (wfBounds.getX() + x), py);
+            else        wave.lineTo ((float) (wfBounds.getX() + x), py);
         }
 
-        // Filled area under the curve
+        // Filled area under curve
         juce::Path fillPath (wave);
         fillPath.lineTo ((float) wfBounds.getRight(), (float) wfBounds.getBottom());
         fillPath.lineTo ((float) wfBounds.getX(), (float) wfBounds.getBottom());
@@ -627,48 +787,61 @@ void LfoPanel::paint (juce::Graphics& g)
 
         auto fillCol = lfo.enabled ? Colors::lfoBlue : Colors::textDim;
         g.setGradientFill (juce::ColourGradient (
-            fillCol.withAlpha (0.25f), 0, (float) wfBounds.getY(),
-            fillCol.withAlpha (0.02f), 0, (float) wfBounds.getBottom(), false));
+            fillCol.withAlpha (0.28f), 0, (float) wfBounds.getY(),
+            fillCol.withAlpha (0.0f),  0, (float) wfBounds.getBottom(), false));
         g.fillPath (fillPath);
 
-        // Stroke the waveform line
-        g.setColour (lfo.enabled ? Colors::lfoBlue : Colors::textDim.withAlpha (0.5f));
-        g.strokePath (wave, juce::PathStrokeType (2.0f));
+        // Bright waveform stroke
+        g.setColour (lfo.enabled ? Colors::lfoBlue.withAlpha (0.9f) : Colors::textDim.withAlpha (0.4f));
+        g.strokePath (wave, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved));
+
+        // Secondary glow stroke (wider, dimmer)
+        if (lfo.enabled)
+        {
+            g.setColour (Colors::lfoBlue.withAlpha (0.12f));
+            g.strokePath (wave, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved));
+        }
     }
 
-    // Phase cursor (playhead) with glow
+    // Phase cursor (playhead)
     if (lfo.enabled)
     {
         float px = wfBounds.getX() + lfo.phase * wfBounds.getWidth();
         float val = LfoEngine::waveformAt (lfo.shape, lfo.phase, lfo.lastRandom);
         float py = wfBounds.getY() + (1.0f - val) * wfBounds.getHeight();
 
-        // Vertical line
-        g.setColour (Colors::lfoBlue.withAlpha (0.3f));
+        // Vertical scanline
+        g.setColour (Colors::lfoBlue.withAlpha (0.2f));
         g.drawLine (px, (float) wfBounds.getY(), px, (float) wfBounds.getBottom(), 1.0f);
 
-        // Dot at current position
+        // Outer glow ring
+        g.setColour (Colors::lfoBlue.withAlpha (0.15f));
+        g.fillEllipse (px - 8.0f, py - 8.0f, 16.0f, 16.0f);
+        // Inner dot
         g.setColour (Colors::lfoBlue);
-        g.fillEllipse (px - 3.5f, py - 3.5f, 7.0f, 7.0f);
-        g.setColour (Colors::lfoBlue.withAlpha (0.3f));
-        g.fillEllipse (px - 6.0f, py - 6.0f, 12.0f, 12.0f);
+        g.fillEllipse (px - 3.0f, py - 3.0f, 6.0f, 6.0f);
+        // Bright center
+        g.setColour (Colors::text.withAlpha (0.7f));
+        g.fillEllipse (px - 1.2f, py - 1.2f, 2.4f, 2.4f);
     }
 
-    // Border (flat)
-    g.setColour (Colors::border.withAlpha (0.5f));
+    // Border — subtle inset
+    g.setColour (Colors::border.withAlpha (0.4f));
     g.drawRect (wfBounds.toFloat(), 1.0f);
 
     // ── Targets header ───────────────────────────────────────────
     int targetsX = getWidth() / 2 + 10;
+    g.setColour (Colors::lfoBlue.withAlpha (0.5f));
+    g.fillRect (targetsX - 1, 30, 3, 3);
     g.setColour (Colors::textDim.withAlpha (0.6f));
-    g.setFont (juce::Font (juce::FontOptions (8.5f)));
-    g.drawText ("TARGETS", targetsX, 28, 80, 12, juce::Justification::centredLeft);
+    g.setFont (juce::Font (juce::FontOptions (8.0f).withStyle ("Bold")));
+    g.drawText ("TARGETS", targetsX + 6, 28, 60, 12, juce::Justification::centredLeft);
 
     if (lfo.targets.empty())
     {
-        g.setColour (Colors::textDim.withAlpha (0.3f));
+        g.setColour (Colors::textDim.withAlpha (0.25f));
         g.setFont (juce::Font (juce::FontOptions (9.0f)));
-        g.drawText ("No targets assigned", targetsX, 44, 200, 16, juce::Justification::centredLeft);
+        g.drawText ("No targets. Use + TARGET or drag onto a macro.", targetsX, 44, getWidth() / 2 - 30, 16, juce::Justification::centredLeft);
     }
 }
 
@@ -690,8 +863,13 @@ void LfoPanel::resized()
 
     // Knobs next to waveform
     int knobX = getWidth() / 2 - 130;
+    syncToggle.setBounds (knobX - 44, 30, 40, 18);
     rateKnob.setBounds (knobX, 26, 56, 60);
+    divButton.setBounds (knobX + 8, 40, 44, 20);
     depthKnob.setBounds (knobX + 62, 26, 56, 60);
+
+    // Drag handle — visible in top row after shape buttons
+    dragHandle.setBounds (sx + 6, 4, 80, 18);
 
     // Targets on right side
     int targetsX = getWidth() / 2 + 10;
@@ -700,9 +878,15 @@ void LfoPanel::resized()
     int ty = 44;
     for (auto* tr : targetRows)
     {
-        tr->label.setBounds (targetsX, ty, getWidth() / 2 - 50, 16);
-        tr->removeButton.setBounds (getWidth() - 30, ty, 16, 16);
-        ty += 19;
+        tr->label.setBounds (targetsX, ty, getWidth() / 2 - 50, 14);
+        // Range knobs below the label
+        int knobY = ty + 15;
+        int knobSz = 36;
+        tr->minKnob.setBounds (targetsX, knobY, knobSz + 8, knobSz + 14);
+        tr->centerKnob.setBounds (targetsX + knobSz + 14, knobY, knobSz + 8, knobSz + 14);
+        tr->maxKnob.setBounds (targetsX + (knobSz + 14) * 2, knobY, knobSz + 8, knobSz + 14);
+        tr->removeButton.setBounds (getWidth() - 30, ty + 2, 16, 16);
+        ty += 68;
     }
 }
 
@@ -730,6 +914,14 @@ void LfoPanel::refresh()
     rateKnob.setValue (lfo.rate, false);
     depthKnob.setValue (lfo.depth, false);
 
+    // Update sync mode
+    syncToggle.setButtonText (lfo.syncToHost ? "SYNC" : "FREE");
+    syncToggle.setColour (juce::TextButton::buttonColourId,
+        lfo.syncToHost ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
+    rateKnob.setVisible (!lfo.syncToHost);
+    divButton.setVisible (lfo.syncToHost);
+    divButton.setButtonText (LfoEngine::divisionName (lfo.noteDivision));
+
     refreshTargetRows();
     resized();
 }
@@ -751,16 +943,46 @@ void LfoPanel::refreshTargetRows()
         juce::String lbl;
         if (t.type == LfoTarget::Macro)
             lbl = "Macro " + juce::String (t.macroIndex + 1);
-        else if (auto* node = proc.getGraph().getNodeForId (t.nodeId))
+        else 
         {
-            auto& params = node->getProcessor()->getParameters();
-            lbl = node->getProcessor()->getName() + " > "
-                + (t.paramIndex < params.size() ? params[t.paramIndex]->getName (24) : juce::String ("?"));
+            auto nodeId = proc.getChainGraph().getNodeIdForUid (t.slotUid);
+            if (auto* node = proc.getGraph().getNodeForId (nodeId))
+            {
+                auto& params = node->getProcessor()->getParameters();
+                lbl = node->getProcessor()->getName() + " > "
+                    + (t.paramIndex < params.size() ? params[t.paramIndex]->getName (20) : juce::String ("?"));
+            }
         }
         tr->label.setText (lbl, juce::dontSendNotification);
         tr->label.setColour (juce::Label::textColourId, Colors::text);
-        tr->label.setFont (juce::Font (juce::FontOptions (9.5f)));
+        tr->label.setFont (juce::Font (juce::FontOptions (9.0f)));
         addAndMakeVisible (tr->label);
+
+        // Range knobs: Min, Max, Start (center)
+        tr->minKnob.setValue (t.minValue, false);
+        tr->minKnob.setShowPercentage (true);
+        tr->minKnob.onValueChange = [this, ti]() {
+            auto& tgt = proc.getLfoEngine().getLfo (activeLfo).targets[(size_t) ti];
+            tgt.minValue = targetRows[ti]->minKnob.getValue();
+        };
+        addAndMakeVisible (tr->minKnob);
+
+        tr->maxKnob.setValue (t.maxValue, false);
+        tr->maxKnob.setShowPercentage (true);
+        tr->maxKnob.onValueChange = [this, ti]() {
+            auto& tgt = proc.getLfoEngine().getLfo (activeLfo).targets[(size_t) ti];
+            tgt.maxValue = targetRows[ti]->maxKnob.getValue();
+        };
+        addAndMakeVisible (tr->maxKnob);
+
+        tr->centerKnob.setValue (t.center, false);
+        tr->centerKnob.setShowPercentage (true);
+        tr->centerKnob.onValueChange = [this, ti]() {
+            auto& tgt = proc.getLfoEngine().getLfo (activeLfo).targets[(size_t) ti];
+            tgt.center = targetRows[ti]->centerKnob.getValue();
+        };
+        addAndMakeVisible (tr->centerKnob);
+
         tr->removeButton.setColour (juce::TextButton::buttonColourId, Colors::remove.withAlpha (0.3f));
         tr->removeButton.setColour (juce::TextButton::textColourOffId, Colors::text);
         tr->removeButton.onClick = [this, ti]() {
@@ -804,7 +1026,7 @@ void LfoPanel::showTargetMenu (int lfoIndex)
                 {
                     LfoTarget t;
                     t.type = LfoTarget::Parameter;
-                    t.nodeId = slot.nodeId;
+                    t.slotUid = slot.uid;
                     t.paramIndex = pi;
                     lookup.push_back ({ t });
                     sub.addItem (itemId++, params[pi]->getName (40));
@@ -857,6 +1079,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
         presetBrowser.setVisible (presetBrowserOpen);
         if (presetBrowserOpen) presetBrowser.refresh();
         resized();
+        repaint();
     };
     tabMappings.onClick = [this]() { setActiveTab (0); };
     tabLfo.onClick = [this]() { setActiveTab (1); };
@@ -869,6 +1092,10 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
         // Close all plugin editor windows BEFORE refreshing — the old graph nodes are gone
         pluginWindows.clear();
         windowCloseTimestamps.clear();
+        // Close preset browser so chains reposition cleanly
+        presetBrowserOpen = false;
+        presetsToggle.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+        presetBrowser.setVisible (false);
         refreshChainView();
         mappingPanel.refresh();
         lfoPanel.refresh();
@@ -885,6 +1112,20 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
         macroKnobs[i].setArcColour (macroColours[i]);
         macroKnobs[i].setDefaultValue (0.0f);
         macroKnobs[i].onValueChange = [this, i]() { proc.getParameters()[i]->setValueNotifyingHost (macroKnobs[i].getValue()); };
+        macroKnobs[i].onDrop = [this, i] (const juce::var& desc) {
+            auto str = desc.toString();
+            if (str.startsWith ("lfo:"))
+            {
+                int lfoIndex = str.substring (4).getIntValue();
+                LfoTarget t;
+                t.type = LfoTarget::Macro;
+                t.macroIndex = i;
+                proc.getLfoEngine().addTarget (lfoIndex, t);
+                // Auto-enable the LFO when assigning a target
+                proc.getLfoEngine().getLfo (lfoIndex).enabled = true;
+                lfoPanel.refresh();
+            }
+        };
         addAndMakeVisible (macroKnobs[i]);
 
         macroLabels[i].setText ("MACRO " + juce::String (i + 1), juce::dontSendNotification);
@@ -908,14 +1149,24 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
             }
         };
         addAndMakeVisible (learnButtons[i]);
+
+        clearButtons[i].setButtonText ("CLR");
+        clearButtons[i].setColour (juce::TextButton::buttonColourId, Colors::remove.withAlpha (0.25f));
+        clearButtons[i].setColour (juce::TextButton::textColourOffId, Colors::remove);
+        clearButtons[i].onClick = [this, i]() {
+            proc.getMacroManager().clearMappings (i);
+            refreshMacroLabels(); mappingPanel.refresh();
+        };
+        addAndMakeVisible (clearButtons[i]);
     }
 
     mappingPanel.onMappingChanged = [this]() { refreshMacroLabels(); };
     addAndMakeVisible (mappingPanel);
-    lfoPanel.setVisible (false);
     addAndMakeVisible (lfoPanel);
+    setActiveTab (0);
 
     refreshChainView(); refreshMacroLabels();
+    setResizable (true, false);
     setSize (940, 740);
     startTimer (50);
 }
@@ -938,66 +1189,123 @@ void ChainHostEditor::timerCallback()
                 learnButtons[i].setColour (juce::TextButton::textColourOffId, Colors::textDim);
                 refreshMacroLabels();
             }
+
+    // Sync macro knob visuals with current values (LFO modulation + host automation)
+    for (int i = 0; i < MacroManager::numMacros; ++i)
+    {
+        float displayVal = proc.getMacroManager().getLastValue (i);
+        if (std::abs (displayVal - macroKnobs[i].getValue()) > 0.001f)
+            macroKnobs[i].setValue (displayVal, false);
+    }
+
     if (activeTab == 1) lfoPanel.repaint();
 }
 
 void ChainHostEditor::paint (juce::Graphics& g)
 {
+    // Base fill — deep obsidian
     g.fillAll (Colors::bg);
 
-    // Flat header — Ableton rack style
+    // Subtle noise-like texture via fine horizontal scan lines
+    g.setColour (juce::Colour (0x03ffffff));
+    for (int sy = 0; sy < getHeight(); sy += 2)
+        g.fillRect (0, sy, getWidth(), 1);
+
+    // ── Header ──────────────────────────────────────────────────────
     {
-        g.setColour (Colors::surface);
-        g.fillRect (0, 0, getWidth(), 48);
-        g.setColour (Colors::border);
-        g.drawLine (0, 48, (float)getWidth(), 48, 1.0f);
+        // Gradient header: surface fading into bg
+        g.setGradientFill (juce::ColourGradient (
+            Colors::surface, 0, 0,
+            Colors::surface.withAlpha (0.0f), 0, 56, false));
+        g.fillRect (0, 0, getWidth(), 56);
 
+        // Bottom edge: subtle warm glow line
+        g.setGradientFill (juce::ColourGradient (
+            Colors::accent.withAlpha (0.0f), 0, 48,
+            Colors::accent.withAlpha (0.12f), (float) getWidth() * 0.3f, 48, false));
+        g.fillRect (0, 47, getWidth(), 2);
+        g.setColour (Colors::border.withAlpha (0.5f));
+        g.drawLine (0, 48, (float) getWidth(), 48, 1.0f);
+
+        // Title — bold with subtle glow
         g.setColour (Colors::accent);
-        g.setFont (juce::Font (juce::FontOptions (20.0f).withStyle ("Bold")));
-        g.drawText ("ChainHost", 16, 8, 160, 32, juce::Justification::centredLeft);
-        g.setColour (Colors::textDim.withAlpha (0.5f));
-        g.setFont (juce::Font (juce::FontOptions (9.0f)));
-        g.drawText ("v0.2", 138, 20, 30, 12, juce::Justification::centredLeft);
-    }
+        g.setFont (juce::Font (juce::FontOptions (21.0f).withStyle ("Bold")));
+        g.drawText ("ChainHost", 16, 6, 160, 36, juce::Justification::centredLeft);
 
-    // Chain rows — flat with 1px separator lines
-    int chainTop = 48 + (presetBrowserOpen ? 140 : 0);
-    auto& cg = proc.getChainGraph();
-    int y = chainTop;
-    for (int i = 0; i < cg.getNumChains(); ++i) {
-        // Alternating row tint
-        if (i % 2 == 0) { g.setColour (Colors::surface.withAlpha (0.12f)); g.fillRect (0, y, getWidth(), 86); }
-
-        // Rectangular chain badge (no rounded corners)
-        g.setColour (Colors::chainAccent.withAlpha (0.1f));
-        g.fillRect (10, y + 8, 30, 30);
-        g.setColour (Colors::chainAccent.withAlpha (0.7f));
-        g.setFont (juce::Font (juce::FontOptions (14.0f).withStyle ("Bold")));
-        g.drawText (juce::String (i + 1), 10, y + 8, 30, 30, juce::Justification::centred);
+        // Version badge
         g.setColour (Colors::textDim.withAlpha (0.35f));
-        g.setFont (juce::Font (juce::FontOptions (7.5f)));
-        g.drawText ("CHAIN", 10, y + 40, 30, 10, juce::Justification::centred);
-
-        // Row separator
-        g.setColour (Colors::border.withAlpha (0.3f));
-        g.drawLine (0, (float)(y + 88), (float)getWidth(), (float)(y + 88), 1.0f);
-        y += 88;
+        g.setFont (juce::Font (juce::FontOptions (8.5f)));
+        g.drawText ("v" CHAINHOST_VERSION, 140, 22, 42, 10, juce::Justification::centredLeft);
     }
 
-    // Macro section — flat, bottom-left, 4x2 grid
+    // ── Chain rows ──────────────────────────────────────────────────
     int macroTop = getHeight() - 230;
-    g.setColour (Colors::border);
-    g.drawLine (0, (float)macroTop, (float)getWidth(), (float)macroTop, 1.0f);
-    g.setColour (Colors::surface);
-    g.fillRect (0, macroTop + 1, 210, 109);
-    g.setColour (Colors::textDim.withAlpha (0.5f));
-    g.setFont (juce::Font (juce::FontOptions (9.0f)));
-    g.drawText ("MACROS", 8, macroTop + 4, 60, 12, juce::Justification::centredLeft);
-    // Vertical separator between macros and mapping panel
-    g.setColour (Colors::border.withAlpha (0.4f));
-    g.drawLine (210, (float)macroTop, 210, (float)(macroTop + 110), 1.0f);
-    g.setColour (Colors::border);
-    g.drawLine (0, (float)(macroTop + 110), (float)getWidth(), (float)(macroTop + 110), 1.0f);
+    auto& cg = proc.getChainGraph();
+    for (int i = 0; i < cg.getNumChains() && i < (int) chainRows.size(); ++i)
+    {
+        // Derive row position from the actual component bounds (set by resized)
+        int rowY = chainRows[i]->muteButton.getBounds().getY() - 12;
+        int rowBottom = rowY + 80;
+
+        // Don't paint chain rows that overlap the macro/LFO section
+        if (rowBottom > macroTop) break;
+
+        // Alternating row depth
+        if (i % 2 == 0)
+        {
+            g.setColour (Colors::surface.withAlpha (0.15f));
+            g.fillRect (0, rowY, getWidth(), 80);
+        }
+
+        // Chain mute button indicator
+        auto btnRect = chainRows[i]->muteButton.getBounds().toFloat().expanded (3);
+        bool active = !cg.isChainMuted (i);
+
+        if (active)
+        {
+            g.setColour (Colors::chainAccent.withAlpha (0.08f));
+            g.fillRect (btnRect.expanded (5));
+            g.setColour (Colors::chainAccent.withAlpha (0.12f));
+            g.fillRect (btnRect.expanded (2));
+        }
+        g.setColour (active ? Colors::chainAccent.withAlpha (0.55f) : Colors::border.withAlpha (0.4f));
+        g.drawRect (btnRect, 1.0f);
+
+        // Row separator — gradient fade from left
+        g.setGradientFill (juce::ColourGradient (
+            Colors::border.withAlpha (0.4f), 0, (float) rowBottom,
+            Colors::border.withAlpha (0.08f), (float) getWidth(), (float) rowBottom, false));
+        g.fillRect (0, rowBottom - 1, getWidth(), 1);
+    }
+
+    // ── Macro section ───────────────────────────────────────────────
+    int macroAreaW = getWidth() / 2;
+
+    // Top edge with accent glow
+    g.setGradientFill (juce::ColourGradient (
+        Colors::accent.withAlpha (0.06f), 0, (float) macroTop,
+        Colors::accent.withAlpha (0.0f), 0, (float) (macroTop + 16), false));
+    g.fillRect (0, macroTop, macroAreaW, 16);
+    g.setColour (Colors::border.withAlpha (0.6f));
+    g.drawLine (0, (float) macroTop, (float) getWidth(), (float) macroTop, 1.0f);
+
+    // Macro area background — slightly warmer than base
+    g.setColour (Colors::surface.withAlpha (0.4f));
+    g.fillRect (0, macroTop + 1, macroAreaW, getHeight() - macroTop - 1);
+
+    // Section label
+    g.setColour (Colors::accent.withAlpha (0.4f));
+    g.setFont (juce::Font (juce::FontOptions (8.0f).withStyle ("Bold")));
+    g.drawText ("MACROS", 10, macroTop + 4, 52, 10, juce::Justification::centredLeft);
+    // Small accent dot before label
+    g.setColour (Colors::accent.withAlpha (0.6f));
+    g.fillRect (6, macroTop + 7, 3, 3);
+
+    // Vertical separator with gradient
+    g.setGradientFill (juce::ColourGradient (
+        Colors::border.withAlpha (0.6f), (float) macroAreaW, (float) macroTop,
+        Colors::border.withAlpha (0.15f), (float) macroAreaW, (float) getHeight(), false));
+    g.fillRect (macroAreaW, macroTop, 1, getHeight() - macroTop);
 }
 
 void ChainHostEditor::resized()
@@ -1012,32 +1320,45 @@ void ChainHostEditor::resized()
     if (presetBrowserOpen) { presetBrowser.setBounds (0, 48, getWidth(), 140); chainTop = 188; }
 
     auto& cg = proc.getChainGraph();
+    int macroTop = getHeight() - 230;
     int y = chainTop;
     for (int ci = 0; ci < (int)chainRows.size() && ci < cg.getNumChains(); ++ci) {
         auto* row = chainRows[ci];
-        row->volumeKnob.setBounds (44, y + 4, 50, 68);
-        int px = 100;
-        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 152, 84); px += 158; }
-        row->addToChainButton.setBounds (px + 4, y + 28, 30, 30);
-        row->removeChainButton.setBounds (getWidth() - 30, y + 32, 22, 22);
-        y += 88;
+        bool visible = (y + 80) <= macroTop;
+        row->muteButton.setBounds (8, y + 12, 30, 30);
+        row->muteButton.setVisible (visible);
+        row->volumeKnob.setBounds (42, y + 4, 50, 68);
+        row->volumeKnob.setVisible (visible);
+        int px = 96;
+        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 4, 130, 72); slot->setVisible (visible); px += 134; }
+        row->addToChainButton.setBounds (px + 2, y + 24, 26, 26);
+        row->addToChainButton.setVisible (visible);
+        row->removeChainButton.setBounds (getWidth() - 28, y + 28, 20, 20);
+        row->removeChainButton.setVisible (visible);
+        y += 80;
     }
 
-    // Macro knobs: compact 4x2 grid in bottom-left (Serum 2 style)
-    int macroTop = getHeight() - 230;
-    int macroW = 50, macroH = 50;
+    // Macro knobs: 4x2 grid filling entire bottom-left area
+    int macroAreaW = getWidth() / 2;
+    int macroH = (getHeight() - macroTop - 18) / 2;  // available height per row
+    int macroW = macroAreaW / 4;
     for (int i = 0; i < MacroManager::numMacros; ++i) {
         int col = i % 4;
         int row2 = i / 4;
-        int mx = 6 + col * macroW;
-        int my = macroTop + 16 + row2 * (macroH + 2);
-        macroLabels[i].setBounds (mx, my, macroW, 10);
-        macroKnobs[i].setBounds (mx + 2, my + 10, macroW - 4, 34);
-        learnButtons[i].setBounds (mx + 5, my + 44, macroW - 10, 12);
+        int mx = col * macroW;
+        int my = macroTop + 18 + row2 * macroH;
+        int knobSz = juce::jmin (macroW - 16, macroH - 40);
+        macroLabels[i].setBounds (mx, my, macroW, 12);
+        macroKnobs[i].setBounds (mx + (macroW - knobSz) / 2, my + 12, knobSz, knobSz);
+        int btnY = my + 12 + knobSz + 2;
+        int btnAreaW = 44 + 4 + 28;  // LEARN + gap + CLR
+        int btnX = mx + (macroW - btnAreaW) / 2;
+        learnButtons[i].setBounds (btnX, btnY, 44, 14);
+        clearButtons[i].setBounds (btnX + 48, btnY, 28, 14);
     }
 
     // Tabs + panels fill the right side of the bottom section
-    int panelLeft = 214;
+    int panelLeft = macroAreaW + 2;
     tabMappings.setBounds (panelLeft + 4, macroTop + 4, 76, 18);
     tabLfo.setBounds (panelLeft + 86, macroTop + 4, 44, 18);
     int panelTop = macroTop + 26;
@@ -1056,13 +1377,29 @@ void ChainHostEditor::refreshChainView()
         row->volumeKnob.onValueChange = [this, ci, row]() { proc.getChainGraph().setChainVolume (proc.getGraph(), ci, row->volumeKnob.getValue()); };
         addAndMakeVisible (row->volumeKnob);
 
+        // Chain number as mute toggle
+        bool muted = cg.isChainMuted (ci);
+        row->muteButton.setButtonText (juce::String (ci + 1));
+        row->muteButton.setClickingTogglesState (true);
+        row->muteButton.setToggleState (!muted, juce::dontSendNotification);
+        row->muteButton.setColour (juce::TextButton::buttonColourId, muted ? Colors::surfaceRaised : Colors::chainAccent.withAlpha (0.5f));
+        row->muteButton.setColour (juce::TextButton::buttonOnColourId, Colors::chainAccent.withAlpha (0.5f));
+        row->muteButton.setColour (juce::TextButton::textColourOffId, Colors::textDim);
+        row->muteButton.setColour (juce::TextButton::textColourOnId, Colors::chainAccent.brighter (0.4f));
+        row->muteButton.onClick = [this, ci, row]() {
+            bool nowMuted = !row->muteButton.getToggleState();
+            proc.getChainGraph().setChainMuted (proc.getGraph(), ci, nowMuted);
+            row->muteButton.setColour (juce::TextButton::buttonColourId, nowMuted ? Colors::surfaceRaised : Colors::chainAccent.withAlpha (0.5f));
+        };
+        addAndMakeVisible (row->muteButton);
+
         row->removeChainButton.setColour (juce::TextButton::buttonColourId, Colors::remove.withAlpha (0.3f));
         row->removeChainButton.setColour (juce::TextButton::textColourOffId, Colors::text);
         row->removeChainButton.onClick = [this, ci]() {
             for (auto& s : proc.getChainGraph().getChain (ci).slots) {
                 closePluginWindow (s.nodeId);
-                proc.getMacroManager().removeMappingsForNode (s.nodeId);
-                proc.getLfoEngine().removeTargetsForNode (s.nodeId);
+                proc.getMacroManager().removeMappingsForUid (s.uid);
+                proc.getLfoEngine().removeTargetsForUid (s.uid);
             }
             proc.getChainGraph().removeParallelChain (proc.getGraph(), ci);
             refreshChainView(); mappingPanel.refresh(); lfoPanel.refresh(); refreshMacroLabels();
@@ -1075,11 +1412,12 @@ void ChainHostEditor::refreshChainView()
         addAndMakeVisible (row->addToChainButton);
 
         for (int si = 0; si < (int)chain.slots.size(); ++si) {
-            auto* comp = row->slotComponents.add (new PluginSlotComponent (proc, chain.slots[(size_t)si].nodeId, ci, si));
+            auto& slot = chain.slots[(size_t)si];
+            auto* comp = row->slotComponents.add (new PluginSlotComponent (proc, slot.nodeId, ci, si));
             comp->onOpenEditor = [this] (auto nid) { openPluginWindow (nid); };
-            comp->onRemove = [this] (auto nid) {
-                closePluginWindow (nid); proc.getMacroManager().removeMappingsForNode (nid);
-                proc.getLfoEngine().removeTargetsForNode (nid); proc.getChainGraph().removePlugin (proc.getGraph(), nid);
+            comp->onRemove = [this, uid = slot.uid] (auto nid) {
+                closePluginWindow (nid); proc.getMacroManager().removeMappingsForUid (uid);
+                proc.getLfoEngine().removeTargetsForUid (uid); proc.getChainGraph().removePlugin (proc.getGraph(), nid);
                 refreshChainView(); mappingPanel.refresh(); lfoPanel.refresh(); refreshMacroLabels();
             };
             comp->onMove = [this] (int fc, int fs, int tc, int ts) { proc.getChainGraph().movePlugin (proc.getGraph(), fc, fs, tc, ts); refreshChainView(); };
@@ -1096,11 +1434,12 @@ void ChainHostEditor::refreshMacroLabels()
         if (mappings.empty()) {
             macroLabels[i].setText ("MACRO " + juce::String (i + 1), juce::dontSendNotification);
             macroLabels[i].setColour (juce::Label::textColourId, Colors::textDim);
+            clearButtons[i].setVisible (false);
         } else {
-            // Show the first mapped parameter's plugin name + param name
             juce::String name;
             for (auto& m : mappings) {
-                if (auto* node = proc.getGraph().getNodeForId (m.nodeId)) {
+                auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+                if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
                     auto& params = node->getProcessor()->getParameters();
                     if (m.paramIndex < params.size()) {
                         if (name.isNotEmpty()) name += ", ";
@@ -1109,10 +1448,10 @@ void ChainHostEditor::refreshMacroLabels()
                 }
             }
             if (name.isEmpty()) name = "?";
-            // Truncate if too long
             if (name.length() > 28) name = name.substring (0, 25) + "...";
             macroLabels[i].setText (name, juce::dontSendNotification);
             macroLabels[i].setColour (juce::Label::textColourId, Colors::accent);
+            clearButtons[i].setVisible (true);
         }
     }
 }
@@ -1134,7 +1473,8 @@ void ChainHostEditor::mouseDown (const juce::MouseEvent& e)
                 int id = 1;
                 for (auto& m : mappings) {
                     juce::String itemName = "?";
-                    if (auto* node = proc.getGraph().getNodeForId (m.nodeId)) {
+                    auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+                    if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
                         auto& params = node->getProcessor()->getParameters();
                         if (m.paramIndex < params.size())
                             itemName = node->getProcessor()->getName() + " > " + params[m.paramIndex]->getName (30);
@@ -1150,7 +1490,7 @@ void ChainHostEditor::mouseDown (const juce::MouseEvent& e)
                             proc.getMacroManager().clearMappings (i);
                         } else if (result > 0 && result <= (int) mappings.size()) {
                             auto& m = mappings[(size_t) result - 1];
-                            proc.getMacroManager().removeMapping (i, m.nodeId, m.paramIndex);
+                            proc.getMacroManager().removeMapping (i, m.slotUid, m.paramIndex);
                         }
                         refreshMacroLabels();
                         mappingPanel.refresh();

@@ -6,29 +6,45 @@
 #include "PluginProcessor.h"
 
 //==============================================================================
-// Colour palette — warm amber on deep charcoal
+// Colour palette — "Studio Obsidian": warm amber on deep volcanic charcoal
 namespace Colors
 {
-    const juce::Colour bg           (0xff16161e);
-    const juce::Colour bgDeep       (0xff111118);
-    const juce::Colour surface      (0xff1e1e2a);
-    const juce::Colour surfaceRaised(0xff262636);
-    const juce::Colour surfaceHover (0xff2e2e40);
-    const juce::Colour border       (0xff333346);
-    const juce::Colour borderSubtle (0xff2a2a3c);
-    const juce::Colour text         (0xffe8e8f0);
-    const juce::Colour textMid      (0xffa0a0b4);
-    const juce::Colour textDim      (0xff606078);
-    const juce::Colour accent       (0xffe8943a);
-    const juce::Colour accentBright (0xfffab04e);
-    const juce::Colour remove       (0xffcc4455);
-    const juce::Colour bypass       (0xff55bb77);
-    const juce::Colour wet          (0xff44aacc);
-    const juce::Colour chainAccent  (0xff7788cc);
-    const juce::Colour slotBg       (0xff1b1b28);
-    const juce::Colour slotBorder   (0xff303044);
-    const juce::Colour learn        (0xffee6622);
-    const juce::Colour lfoBlue      (0xff3399ee);
+    // Backgrounds — deep obsidian with subtle blue-black undertone
+    const juce::Colour bg           (0xff101017);
+    const juce::Colour bgDeep       (0xff0b0b12);
+    const juce::Colour surface      (0xff181824);
+    const juce::Colour surfaceRaised(0xff222234);
+    const juce::Colour surfaceHover (0xff2c2c42);
+
+    // Borders — cool slate with structure
+    const juce::Colour border       (0xff2e2e44);
+    const juce::Colour borderSubtle (0xff232338);
+    const juce::Colour borderGlow   (0xff3a3a58);
+
+    // Text — high contrast with warm highlights
+    const juce::Colour text         (0xfff0eff6);
+    const juce::Colour textMid      (0xff9898b0);
+    const juce::Colour textDim      (0xff555570);
+
+    // Accent — molten amber/gold
+    const juce::Colour accent       (0xfff0982e);
+    const juce::Colour accentBright (0xffffc04a);
+    const juce::Colour accentDeep   (0xffc87820);
+
+    // Semantic
+    const juce::Colour remove       (0xffe04458);
+    const juce::Colour bypass       (0xff4cc88a);
+    const juce::Colour wet          (0xff38b8d8);
+    const juce::Colour chainAccent  (0xff6e88d0);
+    const juce::Colour learn        (0xfff06828);
+
+    // Slot
+    const juce::Colour slotBg       (0xff14141f);
+    const juce::Colour slotBorder   (0xff2a2a40);
+
+    // LFO — electric cyan
+    const juce::Colour lfoBlue      (0xff2ea8f0);
+    const juce::Colour lfoBlueDim   (0xff1a6090);
 }
 
 //==============================================================================
@@ -41,7 +57,7 @@ public:
 
 //==============================================================================
 // Arc knob using juce::Slider + CopperLookAndFeel + value overlay
-class FabKnob : public juce::Component
+class FabKnob : public juce::Component, public juce::DragAndDropTarget
 {
 public:
     FabKnob (const juce::String& label = {}, juce::Colour arcCol = Colors::accent);
@@ -62,12 +78,20 @@ public:
     juce::Slider& getSlider() { return slider; }
     std::function<void()> onValueChange;
 
+    // Drag-and-drop target support
+    bool isInterestedInDragSource (const SourceDetails&) override;
+    void itemDropped (const SourceDetails&) override;
+    void itemDragEnter (const SourceDetails&) override { dropHover = true; repaint(); }
+    void itemDragExit (const SourceDetails&) override  { dropHover = false; repaint(); }
+    std::function<void (const juce::var&)> onDrop;
+
 private:
     juce::Slider slider;
     juce::String label, suffix = "%";
     juce::Colour arcColour;
     float defaultValue = 0.0f;
     bool showPercentage = true;
+    bool dropHover = false;
 };
 
 //==============================================================================
@@ -156,7 +180,7 @@ public:
 private:
     ChainHostProcessor& proc;
     int selectedMacro = 0, learningMacroIndex = -1;
-    struct ParamSnapshot { juce::AudioProcessorGraph::NodeID nodeId; int paramIndex; float value; };
+    struct ParamSnapshot { juce::String slotUid; int paramIndex; float value; };
     std::vector<ParamSnapshot> learnSnapshot;
     juce::TextButton macroSelectButtons[MacroManager::numMacros];
     juce::TextButton mapButton { "+ MAP" }, learnButton { "LEARN" };
@@ -164,7 +188,7 @@ private:
         juce::Label label;
         FabKnob minKnob { "Min", Colors::textMid }, maxKnob { "Max", Colors::textMid };
         juce::TextButton removeButton { juce::CharPointer_UTF8 ("\xc3\x97") };
-        juce::AudioProcessorGraph::NodeID nodeId; int paramIndex;
+        juce::String slotUid; int paramIndex;
     };
     juce::OwnedArray<MappingRow> mappingRows;
     void showParameterPicker();
@@ -190,10 +214,24 @@ private:
     juce::TextButton enableButton { "OFF" };
     juce::TextButton shapeButtons[LfoEngine::NumShapes];
     FabKnob rateKnob { "Rate", Colors::lfoBlue }, depthKnob { "Depth", Colors::lfoBlue };
+    juce::TextButton syncToggle { "Hz" };       // toggles between Hz and BPM
+    juce::TextButton divButton { "1/4" };       // shows current note division (BPM mode)
     juce::TextButton addTargetButton { "+ TARGET" };
+
+    // Drag handle — drag onto macro knobs to assign LFO target
+    struct LfoDragHandle : public juce::Component
+    {
+        int* activeLfoPtr = nullptr;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+    };
+    LfoDragHandle dragHandle;
 
     struct TargetRow {
         juce::Label label;
+        FabKnob minKnob { "Min", Colors::lfoBlue }, maxKnob { "Max", Colors::lfoBlue },
+                centerKnob { "Start", Colors::lfoBlue };
         juce::TextButton removeButton { juce::CharPointer_UTF8 ("\xc3\x97") };
     };
     juce::OwnedArray<TargetRow> targetRows;
@@ -230,6 +268,7 @@ private:
     struct ChainViewRow {
         juce::OwnedArray<PluginSlotComponent> slotComponents;
         FabKnob volumeKnob { "Vol", Colors::chainAccent };
+        juce::TextButton muteButton;  // chain number, toggles mute
         juce::TextButton removeChainButton { juce::CharPointer_UTF8 ("\xc3\x97") },
                          addToChainButton { "+" };
     };
@@ -238,6 +277,7 @@ private:
     FabKnob macroKnobs[MacroManager::numMacros];
     juce::Label macroLabels[MacroManager::numMacros];
     juce::TextButton learnButtons[MacroManager::numMacros];
+    juce::TextButton clearButtons[MacroManager::numMacros];
 
     juce::TextButton tabMappings { "MAPPINGS" }, tabLfo { "LFO" };
     int activeTab = 0;
