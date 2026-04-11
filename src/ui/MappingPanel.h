@@ -33,7 +33,7 @@ private:
         juce::Label label;
         FabKnob minKnob { "Min", Colors::textMid }, maxKnob { "Max", Colors::textMid };
         juce::TextButton removeButton { juce::CharPointer_UTF8 ("\xc3\x97") };
-        juce::AudioProcessorGraph::NodeID nodeId; int paramIndex;
+        juce::String slotUid; int paramIndex;
     };
     juce::OwnedArray<MappingRow> mappingRows;
     void showParameterPicker();

@@ -97,6 +97,7 @@ target_sources(ChainHost PRIVATE
     src/ui/LfoWaveformEditor.cpp
     src/ui/LfoPanel.cpp
     src/ui/ChainHostEditor.cpp
+    src/ui/PluginWindowMac.mm
 )
 
 target_compile_definitions(ChainHost PUBLIC

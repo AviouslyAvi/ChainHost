@@ -6,3 +6,12 @@ Read CLAUDE.md for modification rules (they apply to all AI tools).
 UI components are in src/ui/, one class per .h/.cpp pair.
 Engine code is in src/ root. Thread safety is critical — see CONTEXT.md.
 Build: `cd build && cmake .. && cmake --build .`
+
+## "Pick up where Claude left off" mode
+
+When the user says "pick up where Claude left off" (or similar):
+
+1. **Read CONTEXT.md and CLAUDE.md fully before making any changes.** These contain architecture invariants and critical rules that must not be violated.
+2. **Ask the user which specific task to continue and which files are involved.** Check `git log --oneline -5` and `git diff HEAD~1` to understand what was done most recently.
+3. **Build after every change:** `cd build && cmake .. && cmake --build .` — zero errors, zero warnings required.
+4. **Commit your work with clear messages** so Claude can read the git history and resume cleanly in the next session.

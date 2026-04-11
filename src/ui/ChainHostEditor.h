@@ -15,6 +15,7 @@
 
 class ChainHostEditor : public juce::AudioProcessorEditor,
                         public juce::DragAndDropContainer,
+                        public juce::FileDragAndDropTarget,
                         private juce::Timer
 {
 public:
@@ -23,6 +24,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    bool isInterestedInFileDrag (const juce::StringArray& files) override;
+    void filesDropped (const juce::StringArray& files, int x, int y) override;
 private:
     void timerCallback() override;
     ChainHostProcessor& proc;
@@ -41,7 +44,23 @@ private:
         juce::TextButton removeChainButton { juce::CharPointer_UTF8 ("\xc3\x97") },
                          addToChainButton { "+" };
     };
-    juce::OwnedArray<ChainViewRow> chainRows;
+
+    class ChainContainer : public juce::Component {
+    public:
+        ChainContainer (ChainHostProcessor& p) : proc (p) {}
+        void paint (juce::Graphics& g) override;
+        void resized() override;
+        juce::OwnedArray<ChainViewRow> chainRows;
+    private:
+        ChainHostProcessor& proc;
+    };
+
+    juce::Viewport chainViewport;
+    ChainContainer chainContainer;
+
+    int scrollIdleCounter = 0;
+    static constexpr int kScrollHideTicks = 40; // ~2 seconds at 50ms timer
+    float scrollAlpha = 0.0f;
 
     FabKnob macroKnobs[MacroManager::numMacros];
     juce::Label macroLabels[MacroManager::numMacros];

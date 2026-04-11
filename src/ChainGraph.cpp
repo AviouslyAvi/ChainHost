@@ -203,6 +203,14 @@ bool ChainGraph::findSlot (juce::AudioProcessorGraph::NodeID nodeId, int& ci, in
     return false;
 }
 
+juce::String ChainGraph::getUidForNodeId (juce::AudioProcessorGraph::NodeID nodeId) const
+{
+    for (auto& chain : chains)
+        for (auto& slot : chain.slots)
+            if (slot.nodeId == nodeId) return slot.uid;
+    return {};
+}
+
 juce::AudioProcessorGraph::NodeID ChainGraph::getNodeIdForUid (const juce::String& uid) const
 {
     for (auto& chain : chains)

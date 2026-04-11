@@ -70,9 +70,10 @@ void MappingPanel::refresh()
     for (auto& m : proc.getMacroManager().getMappings (selectedMacro))
     {
         auto* row = mappingRows.add (new MappingRow());
-        row->nodeId = m.nodeId; row->paramIndex = m.paramIndex;
+        row->slotUid = m.slotUid; row->paramIndex = m.paramIndex;
         juce::String pName = "?", plugName = "?";
-        if (auto* node = proc.getGraph().getNodeForId (m.nodeId)) {
+        auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+        if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
             plugName = node->getProcessor()->getName();
             auto& params = node->getProcessor()->getParameters();
             if (m.paramIndex < params.size()) pName = params[m.paramIndex]->getName (28);
@@ -85,17 +86,17 @@ void MappingPanel::refresh()
         row->minKnob.setValue (m.minValue, false); row->minKnob.setShowPercentage (true);
         row->maxKnob.setValue (m.maxValue, false); row->maxKnob.setShowPercentage (true);
         row->minKnob.onValueChange = row->maxKnob.onValueChange =
-            [this, nid = m.nodeId, pi = m.paramIndex, &r = *row]() {
-                proc.getMacroManager().removeMapping (selectedMacro, nid, pi);
-                proc.getMacroManager().addMapping (selectedMacro, nid, pi, r.minKnob.getValue(), r.maxKnob.getValue());
+            [this, uid = m.slotUid, pi = m.paramIndex, &r = *row]() {
+                proc.getMacroManager().removeMapping (selectedMacro, uid, pi);
+                proc.getMacroManager().addMapping (selectedMacro, uid, pi, r.minKnob.getValue(), r.maxKnob.getValue());
                 if (onMappingChanged) onMappingChanged();
             };
         addAndMakeVisible (row->minKnob); addAndMakeVisible (row->maxKnob);
 
         row->removeButton.setColour (juce::TextButton::buttonColourId, Colors::remove.withAlpha (0.3f));
         row->removeButton.setColour (juce::TextButton::textColourOffId, Colors::text);
-        row->removeButton.onClick = [this, nid = m.nodeId, pi = m.paramIndex]() {
-            proc.getMacroManager().removeMapping (selectedMacro, nid, pi);
+        row->removeButton.onClick = [this, uid = m.slotUid, pi = m.paramIndex]() {
+            proc.getMacroManager().removeMapping (selectedMacro, uid, pi);
             refresh(); if (onMappingChanged) onMappingChanged();
         };
         addAndMakeVisible (row->removeButton);
@@ -140,16 +141,19 @@ void MappingPanel::checkLearn() {
             }
         }
     if (bestDelta > 0.05f && bestParam >= 0) {
-        proc.getMacroManager().addMapping (learningMacroIndex, bestNode, bestParam, 0.0f, 1.0f);
-        setSelectedMacro (learningMacroIndex); stopLearn(); refresh();
-        if (onMappingChanged) onMappingChanged();
+        auto uid = proc.getChainGraph().getUidForNodeId (bestNode);
+        if (uid.isNotEmpty()) {
+            proc.getMacroManager().addMapping (learningMacroIndex, uid, bestParam, 0.0f, 1.0f);
+            setSelectedMacro (learningMacroIndex); stopLearn(); refresh();
+            if (onMappingChanged) onMappingChanged();
+        }
     }
 }
 
 void MappingPanel::showParameterPicker() {
     juce::PopupMenu menu; auto& cg = proc.getChainGraph();
     int itemId = 1;
-    struct PI { juce::AudioProcessorGraph::NodeID n; int p; };
+    struct PI { juce::String uid; int p; };
     std::vector<PI> lookup;
     for (int ci = 0; ci < cg.getNumChains(); ++ci)
         for (auto& slot : cg.getChain (ci).slots)
@@ -157,7 +161,7 @@ void MappingPanel::showParameterPicker() {
                 auto& params = node->getProcessor()->getParameters();
                 if (params.isEmpty()) continue;
                 juce::PopupMenu sub;
-                for (int pi = 0; pi < params.size(); ++pi) { lookup.push_back ({slot.nodeId, pi}); sub.addItem (itemId++, params[pi]->getName (40)); }
+                for (int pi = 0; pi < params.size(); ++pi) { lookup.push_back ({slot.uid, pi}); sub.addItem (itemId++, params[pi]->getName (40)); }
                 auto lbl = node->getProcessor()->getName();
                 if (cg.getNumChains() > 1) lbl = "Chain " + juce::String (ci + 1) + " > " + lbl;
                 menu.addSubMenu (lbl, sub);
@@ -165,6 +169,6 @@ void MappingPanel::showParameterPicker() {
     if (itemId == 1) menu.addItem (-1, "(No plugins)", false, false);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (mapButton),
         [this, lookup] (int r) { if (r > 0 && r <= (int)lookup.size()) {
-            proc.getMacroManager().addMapping (selectedMacro, lookup[(size_t)(r-1)].n, lookup[(size_t)(r-1)].p, 0.0f, 1.0f);
+            proc.getMacroManager().addMapping (selectedMacro, lookup[(size_t)(r-1)].uid, lookup[(size_t)(r-1)].p, 0.0f, 1.0f);
             refresh(); if (onMappingChanged) onMappingChanged(); }});
 }

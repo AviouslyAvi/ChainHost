@@ -9,6 +9,7 @@ class PluginWindow : public juce::DocumentWindow
 public:
     PluginWindow (const juce::String& name, juce::AudioProcessorGraph::NodeID nid,
                   juce::AudioProcessorEditor* editor,
+                  juce::Component* parentComp,
                   std::function<void (juce::AudioProcessorGraph::NodeID)> onClose);
     void closeButtonPressed() override;
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }

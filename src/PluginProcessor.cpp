@@ -37,7 +37,7 @@ void ChainHostProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         chainGraph.init (graph);
 
     graph.prepareToPlay (sampleRate, samplesPerBlock);
-    lfoEngine.start (macroManager, graph);
+    lfoEngine.start (macroManager, graph, chainGraph);
 }
 
 void ChainHostProcessor::releaseResources()
@@ -110,7 +110,7 @@ void ChainHostProcessor::setStateInformation (const void* data, int sizeInBytes)
 void ChainHostProcessor::parameterValueChanged (int parameterIndex, float newValue)
 {
     if (parameterIndex >= 0 && parameterIndex < MacroManager::numMacros)
-        macroManager.setMacroValue (parameterIndex, newValue, graph);
+        macroManager.setMacroValue (parameterIndex, newValue, graph, chainGraph);
 }
 
 juce::File ChainHostProcessor::getPresetsDirectory()

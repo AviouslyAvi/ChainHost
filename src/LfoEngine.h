@@ -54,8 +54,8 @@ public:
 
     struct Lfo
     {
-        bool enabled = false;
-        Shape shape = Sine;
+        bool enabled = true;
+        Shape shape = Triangle;
         float rate = 1.0f;          // Hz (when not tempo-synced)
         float depth = 0.5f;         // 0–1
 
@@ -66,11 +66,11 @@ public:
         bool randomNeedsUpdate = true;
 
         // ── Serum-style features ─────────────────────────────────
-        bool tempoSync = false;
+        bool tempoSync = true;
         SyncDiv syncDiv = Sync_1_4;
 
         bool retrigger = true;      // reset phase on note-on
-        bool unipolar = true;       // 0→1 (true) vs -1→+1 (false)
+        bool unipolar = false;      // 0→1 (true) vs -1→+1 (false)
         bool envelopeMode = false;  // one-shot: play once then hold
         bool envelopeDone = false;
 
@@ -91,13 +91,13 @@ public:
     LfoEngine();
     ~LfoEngine() override;
 
-    void start (MacroManager& macros, juce::AudioProcessorGraph& graph);
+    void start (MacroManager& macros, juce::AudioProcessorGraph& graph, const ChainGraph& chainGraph);
     void stop();
 
     // Call from processBlock to feed tempo + note-on info
     void prepareBlock (juce::AudioPlayHead* playHead, const juce::MidiBuffer& midi);
 
-    void process (MacroManager& macros, juce::AudioProcessorGraph& graph);
+    void process (MacroManager& macros, juce::AudioProcessorGraph& graph, const ChainGraph& chainGraph);
 
     Lfo& getLfo (int index)             { return lfos[juce::jlimit (0, numLfos - 1, index)]; }
     const Lfo& getLfo (int index) const { return lfos[juce::jlimit (0, numLfos - 1, index)]; }
@@ -130,6 +130,7 @@ private:
 
     MacroManager* pendingMacros = nullptr;
     juce::AudioProcessorGraph* pendingGraph = nullptr;
+    const ChainGraph* pendingChainGraph = nullptr;
 
     // Thread-safe data fed from audio thread via prepareBlock
     std::atomic<double> currentBpm { 120.0 };

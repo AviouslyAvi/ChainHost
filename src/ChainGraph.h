@@ -246,6 +246,7 @@ public:
     const ParallelChain& getChain (int index) const { return chains[(size_t) index]; }
 
     bool findSlot (juce::AudioProcessorGraph::NodeID nodeId, int& chainIndex, int& slotIndex) const;
+    juce::String getUidForNodeId (juce::AudioProcessorGraph::NodeID nodeId) const;
     juce::AudioProcessorGraph::NodeID getNodeIdForUid (const juce::String& uid) const;
 
     std::unique_ptr<juce::XmlElement> toXml (juce::AudioProcessorGraph& graph) const;

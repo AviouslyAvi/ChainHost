@@ -57,15 +57,22 @@ float syncDivToHz (SyncDiv d, double bpm)
 LfoEngine::LfoEngine() {}
 LfoEngine::~LfoEngine() { stopTimer(); }
 
-void LfoEngine::start (MacroManager& macros, juce::AudioProcessorGraph& graph)
+void LfoEngine::start (MacroManager& macros, juce::AudioProcessorGraph& graph, const ChainGraph& chainGraph)
 {
     pendingMacros = &macros;
     pendingGraph = &graph;
+    pendingChainGraph = &chainGraph;
     lastTimeMs = juce::Time::getMillisecondCounterHiRes();
     startTimer (16); // ~60 Hz
 }
 
-void LfoEngine::stop() { stopTimer(); }
+void LfoEngine::stop()
+{
+    stopTimer();
+    pendingMacros = nullptr;
+    pendingGraph = nullptr;
+    pendingChainGraph = nullptr;
+}
 
 void LfoEngine::prepareBlock (juce::AudioPlayHead* playHead, const juce::MidiBuffer& midi)
 {
@@ -92,14 +99,15 @@ void LfoEngine::prepareBlock (juce::AudioPlayHead* playHead, const juce::MidiBuf
 
 void LfoEngine::timerCallback()
 {
-    if (pendingMacros && pendingGraph)
-        process (*pendingMacros, *pendingGraph);
+    if (pendingMacros && pendingGraph && pendingChainGraph)
+        process (*pendingMacros, *pendingGraph, *pendingChainGraph);
 }
 
-void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph)
+void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph, const ChainGraph& chainGraph)
 {
     pendingMacros = &macros;
     pendingGraph = &graph;
+    pendingChainGraph = &chainGraph;
 
     double now = juce::Time::getMillisecondCounterHiRes();
     double deltaSec = (now - lastTimeMs) / 1000.0;
@@ -133,7 +141,7 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph)
             for (auto& target : lfo.targets)
             {
                 if (target.type == LfoTarget::Macro)
-                    macros.setMacroValue (target.macroIndex, output, graph);
+                    macros.setMacroValue (target.macroIndex, output, graph, chainGraph);
                 else if (auto* node = graph.getNodeForId (target.nodeId))
                 {
                     auto& params = node->getProcessor()->getParameters();
@@ -229,7 +237,7 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph)
         for (auto& target : lfo.targets)
         {
             if (target.type == LfoTarget::Macro)
-                macros.setMacroValue (target.macroIndex, output, graph);
+                macros.setMacroValue (target.macroIndex, output, graph, chainGraph);
             else if (auto* node = graph.getNodeForId (target.nodeId))
             {
                 auto& params = node->getProcessor()->getParameters();
@@ -438,7 +446,7 @@ void LfoEngine::fromXml (const juce::XmlElement& xml)
         if (li < 0 || li >= numLfos) continue;
 
         auto& lfo = lfos[li];
-        lfo.enabled      = lx->getBoolAttribute   ("enabled",      false);
+        lfo.enabled      = lx->getBoolAttribute   ("enabled",      true);
         lfo.shape         = (Shape) lx->getIntAttribute ("shape",   0);
         lfo.rate          = (float) lx->getDoubleAttribute ("rate", 1.0);
         lfo.depth         = (float) lx->getDoubleAttribute ("depth", 0.5);
