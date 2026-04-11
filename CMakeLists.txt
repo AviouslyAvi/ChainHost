@@ -84,11 +84,19 @@ juce_add_plugin(ChainHost
 
 target_sources(ChainHost PRIVATE
     src/PluginProcessor.cpp
-    src/PluginEditor.cpp
     src/PluginScanner.cpp
     src/ChainGraph.cpp
     src/MacroManager.cpp
     src/LfoEngine.cpp
+    src/ui/ChainHostLookAndFeel.cpp
+    src/ui/FabKnob.cpp
+    src/ui/PluginWindow.cpp
+    src/ui/PluginSlotComponent.cpp
+    src/ui/PresetBrowser.cpp
+    src/ui/MappingPanel.cpp
+    src/ui/LfoWaveformEditor.cpp
+    src/ui/LfoPanel.cpp
+    src/ui/ChainHostEditor.cpp
 )
 
 target_compile_definitions(ChainHost PUBLIC
@@ -98,7 +106,6 @@ target_compile_definitions(ChainHost PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=1
-    CHAINHOST_VERSION="${PROJECT_VERSION}"
 )
 
 target_link_libraries(ChainHost

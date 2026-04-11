@@ -1,0 +1,8 @@
+# Gemini CLI Context
+
+This is a JUCE 8 C++ VST3 plugin host called ChainHost.
+Read CONTEXT.md for architecture details.
+Read CLAUDE.md for modification rules (they apply to all AI tools).
+UI components are in src/ui/, one class per .h/.cpp pair.
+Engine code is in src/ root. Thread safety is critical — see CONTEXT.md.
+Build: `cd build && cmake .. && cmake --build .`

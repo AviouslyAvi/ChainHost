@@ -1,5 +1,5 @@
 #include "PluginProcessor.h"
-#include "PluginEditor.h"
+#include "ui/ChainHostEditor.h"
 
 ChainHostProcessor::ChainHostProcessor()
     : AudioProcessor (BusesProperties()
@@ -37,7 +37,7 @@ void ChainHostProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         chainGraph.init (graph);
 
     graph.prepareToPlay (sampleRate, samplesPerBlock);
-    lfoEngine.start (macroManager, graph, chainGraph);
+    lfoEngine.start (macroManager, graph);
 }
 
 void ChainHostProcessor::releaseResources()
@@ -47,13 +47,8 @@ void ChainHostProcessor::releaseResources()
 
 void ChainHostProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    // Feed host BPM to LFO engine for sync mode
-    if (auto* ph = getPlayHead())
-    {
-        auto pos = ph->getPosition();
-        if (pos.hasValue() && pos->getBpm().hasValue())
-            lfoEngine.setHostBpm ((float) *pos->getBpm());
-    }
+    // Feed tempo and note-on info to LFO engine (thread-safe atomics)
+    lfoEngine.prepareBlock (getPlayHead(), midiMessages);
 
     graph.processBlock (buffer, midiMessages);
 }
@@ -115,7 +110,7 @@ void ChainHostProcessor::setStateInformation (const void* data, int sizeInBytes)
 void ChainHostProcessor::parameterValueChanged (int parameterIndex, float newValue)
 {
     if (parameterIndex >= 0 && parameterIndex < MacroManager::numMacros)
-        macroManager.setMacroValue (parameterIndex, newValue, graph, chainGraph);
+        macroManager.setMacroValue (parameterIndex, newValue, graph);
 }
 
 juce::File ChainHostProcessor::getPresetsDirectory()
