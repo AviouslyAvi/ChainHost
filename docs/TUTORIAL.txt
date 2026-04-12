@@ -1,0 +1,173 @@
+ChainHost Quick-Start Tutorial
+===============================
+
+Welcome to ChainHost -- a VST3 plugin host with Serum-style LFO
+modulation, macro controls, and multi-chain signal routing.
+
+
+INSTALLATION (macOS)
+--------------------
+
+Standalone App:
+  Open the DMG and drag ChainHost.app into the Applications folder.
+
+VST3 Plugin:
+  Drag ChainHost.vst3 from the DMG into the VST3 folder.
+  Or copy manually to: /Library/Audio/Plug-Ins/VST3/
+
+macOS Gatekeeper Warning:
+  Since ChainHost is not yet notarized with Apple, macOS may show
+  a warning on first launch.
+
+  Option A -- System Settings (recommended):
+    1. Try to open ChainHost (it will be blocked).
+    2. Go to System Settings > Privacy & Security.
+    3. Scroll to Security -- you'll see "ChainHost" was blocked.
+    4. Click "Open Anyway".
+
+  Option B -- Terminal:
+    sudo xattr -cr /Applications/ChainHost.app
+    sudo xattr -cr /Library/Audio/Plug-Ins/VST3/ChainHost.vst3
+
+  After either option, ChainHost will open normally from then on.
+
+
+1. THE CHAIN SECTION (Top Area)
+-------------------------------
+
+The chain area is where you load and route your plugins.
+
+Loading Plugins:
+  - Click "+ PLUGIN" in the header to add a plugin.
+  - Drag a .vst3 file from Finder directly into ChainHost.
+  - Click "+ CHAIN" to add a parallel signal chain.
+
+Chain Rows:
+  - Chain number (left) -- identifies the chain
+  - Volume knob -- controls the chain's output level
+  - Plugin slots -- click to open the plugin's editor window
+  - "+" button -- add another plugin to the end of this chain
+  - "x" button -- remove this chain
+
+Plugin Windows:
+  Click a plugin slot to open its editor in a floating window.
+  The window stays above ChainHost but not above other apps
+  (like FL Studio's Patcher behavior).
+
+
+2. THE MACRO SECTION (Bottom-Left)
+-----------------------------------
+
+Macros let you control multiple plugin parameters with one knob.
+
+Macro Knobs:
+  - Turn the knob to change the value -- all mapped params move.
+  - Double-click the label to rename it.
+  - Right-click a knob for options (remove LFO, remove mappings).
+
+Assigning Parameters to a Macro:
+  1. Drag handle (crosshair icon) -- drag onto a plugin parameter.
+  2. Link button (chain-link icon) -- browse and select a parameter.
+  3. LEARN button -- click it (turns orange), then move a parameter
+     in any loaded plugin. ChainHost auto-detects and maps it.
+
+The Blue Halo Ring:
+  When an LFO modulates a macro knob, a blue arc shows the mod
+  range. Drag the blue halo up/down to resize depth in real time.
+
+
+3. THE LFO SECTION (Bottom-Right)
+----------------------------------
+
+ChainHost has 4 independent LFOs that can modulate any plugin
+parameter or macro knob.
+
+LFO Tabs:
+  Click LFO 1 through LFO 4 to switch. Each has its own waveform,
+  rate, targets, and settings.
+
+Enable / Shape:
+  - ON/OFF -- enables or disables this LFO.
+  - Shape dropdown -- choose a preset shape (Sine, Triangle, Saw,
+    Square, etc.). Resets the waveform editor to that shape.
+
+Control Row:
+  FREE/SYNC   Toggle free-running Hz or tempo-synced divisions
+  TRIG        Retrigger -- restarts phase on each new MIDI note
+  UNI/BI      Unipolar (0 to 1) or Bipolar (-1 to 1) range
+  ENV         Envelope mode -- plays once and stops (one-shot)
+  FWD/REV/P.P. Playback direction: Forward, Reverse, Ping-Pong
+
+The Waveform Editor:
+  A breakpoint editor like Serum's for drawing custom LFO shapes.
+
+  PTR (Pointer)   Select/move breakpoints, drag handles for tension
+  --- (Flat)       Insert a flat (horizontal) segment
+  Arrow-up         Insert a rising ramp segment
+  Arrow-down       Insert a falling ramp segment
+  Erase            Click to delete a point, drag to sweep-delete
+
+  - Grid snapping: Use X and Y dropdowns below the waveform.
+  - Tension: Hover or drag a curve handle to see percentage.
+  - Playhead: White line shows current LFO phase at 60fps.
+
+LFO Knobs:
+  Rate      LFO speed in Hz (free) or sync division (sync)
+  Depth     How much the LFO affects its targets (0-100%)
+  Delay     Time before LFO starts after note trigger (0-5s)
+  Phase     Starting phase offset (0-100%)
+  Rise      Fade-in time to full depth (0-5s)
+  Smooth    Smooths/filters the LFO output
+
+Targets Section (Right Column):
+  LINK          Pick a plugin parameter or macro as a target
+  Drag handle   Drag onto a macro knob or plugin parameter
+  Link icon     Browse a categorized list of parameters
+  LEARN         Click, move a parameter -- auto-detected
+
+  Assigned targets appear as rows with an "x" to remove them.
+
+LFO + Macros (Bidirectional):
+  - Drag an LFO onto a macro knob to modulate it.
+  - Assign a macro to LFO params for meta-modulation.
+
+
+4. SYNC MODE
+------------
+
+When SYNC is active:
+  - Rate knob scrolls through note divisions (1/16, 1/8, etc.)
+  - Knob label shows the current division name
+  - Select "Hz" from the sync dropdown to go back to free mode
+
+
+5. PRESETS
+----------
+
+Click PRESETS in the header to open the preset browser.
+Save and recall your entire chain + macro + LFO configuration.
+
+
+6. TIPS AND WORKFLOW
+--------------------
+
+  - Hover over any button to see a tooltip explaining what it does.
+  - Right-click a macro knob to remove LFO or macro mappings.
+  - Use ENV mode with a custom shape for one-shot sweeps.
+  - Ping-Pong direction gives smooth bouncing modulation.
+  - Rise time prevents clicks when LFO starts at full depth.
+  - Multiple LFOs on one target: outputs combine.
+
+
+KEYBOARD / MOUSE REFERENCE
+---------------------------
+
+  Open plugin editor       Click the plugin slot
+  Rename macro             Double-click the macro label
+  Remove LFO from macro    Right-click the macro knob
+  Adjust mod depth         Drag the blue halo ring up/down
+  Delete breakpoint        Switch to erase tool, click the point
+  Reset knob to default    Double-click any knob
+
+
+Happy modulating!
