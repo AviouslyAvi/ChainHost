@@ -278,7 +278,7 @@ void ChainHostEditor::ChainContainer::resized()
     for (int ci = 0; ci < chainRows.size(); ++ci) {
         auto* row = chainRows[ci];
         int y = ci * 88;
-        row->volumeKnob.setBounds (44, y + 4, 50, 68);
+        row->volumeKnob.setBounds (34, y + 4, 64, 80);
         int px = 100;
         for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 140, 84); px += 146; }
         row->addToChainButton.setBounds (px + 4, y + 28, 30, 30);
