@@ -42,9 +42,10 @@ private:
     juce::ComboBox syncDivBox;
 
     LfoWaveformEditor waveformEditor;
-    juce::TextButton toolPointer { "PTR" }, toolFlat { "FLAT" },
+    juce::TextButton toolPointer { "PTR" }, toolFlat { "---" },
                      toolRampUp { juce::CharPointer_UTF8 ("\xe2\x86\x97") },
-                     toolRampDown { juce::CharPointer_UTF8 ("\xe2\x86\x98") };
+                     toolRampDown { juce::CharPointer_UTF8 ("\xe2\x86\x98") },
+                     toolErase { juce::CharPointer_UTF8 ("\xe2\x8c\xab") };
     juce::TextButton directionButton { "FWD" };
 
     juce::ComboBox gridXBox, gridYBox;
@@ -52,7 +53,7 @@ private:
     juce::TextButton addTargetButton { "LINK" };
 
     // LFO drag handle — drag onto plugin params to assign as target
-    class LfoDragHandle : public juce::Component
+    class LfoDragHandle : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         LfoDragHandle() {}
@@ -64,7 +65,7 @@ private:
     LfoDragHandle lfoDragHandle;
 
     // LFO link button — opens plugin param picker
-    class LfoLinkButton : public juce::Component
+    class LfoLinkButton : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         void paint (juce::Graphics& g) override;

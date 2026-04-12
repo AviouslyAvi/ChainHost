@@ -72,6 +72,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
 
         auto* handle = dragHandleStorage.add (new MacroDragHandle (i));
         macroDragHandles[i] = handle;
+        handle->setTooltip ("Drag onto a plugin parameter to assign this macro");
         handle->addMouseListener (this, false);
         addAndMakeVisible (handle);
 
@@ -92,8 +93,77 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
         };
         addAndMakeVisible (macroLearnBtns[i]);
 
+        macroLinkBtns[i].setTooltip ("Browse and select a plugin parameter to map to this macro");
         macroLinkBtns[i].onClick = [this, i]() { selectMacro (i); showMacroLinkMenu (i); };
         addAndMakeVisible (macroLinkBtns[i]);
+
+        // Right-click context menu on macro knobs — remove LFO/macro mappings
+        macroKnobs[i].onBuildContextMenu = [this, i] (juce::PopupMenu& menu) {
+            auto& lfoEngine = proc.getLfoEngine();
+            int itemId = 1;
+            bool hasLfo = false;
+            for (int li = 0; li < LfoEngine::numLfos; ++li)
+            {
+                auto& lfo = lfoEngine.getLfo (li);
+                for (int ti = 0; ti < (int) lfo.targets.size(); ++ti)
+                {
+                    auto& t = lfo.targets[(size_t) ti];
+                    if (t.type == LfoTarget::Macro && t.macroIndex == i)
+                    {
+                        menu.addItem (itemId, "Remove LFO " + juce::String (li + 1) + " modulation");
+                        hasLfo = true;
+                    }
+                    ++itemId;
+                }
+            }
+            auto& mappings = proc.getMacroManager().getMappings (i);
+            if (! mappings.empty())
+            {
+                if (hasLfo) menu.addSeparator();
+                menu.addItem (1000, "Remove all macro mappings (" + juce::String ((int) mappings.size()) + ")");
+            }
+        };
+        macroKnobs[i].onContextMenuResult = [this, i] (int result) {
+            if (result == 1000)
+            {
+                proc.getMacroManager().clearMappings (i);
+                refreshMacroLabels();
+                return;
+            }
+            // Find the LFO target to remove
+            auto& lfoEngine = proc.getLfoEngine();
+            int itemId = 1;
+            for (int li = 0; li < LfoEngine::numLfos; ++li)
+            {
+                auto& lfo = lfoEngine.getLfo (li);
+                for (int ti = 0; ti < (int) lfo.targets.size(); ++ti)
+                {
+                    if (itemId == result)
+                    {
+                        lfoEngine.removeTarget (li, ti);
+                        lfoPanel.refresh();
+                        return;
+                    }
+                    ++itemId;
+                }
+            }
+        };
+
+        // Dragging the blue halo on a macro knob adjusts the LFO depth targeting it
+        macroKnobs[i].onModDepthChanged = [this, i] (float newDepth) {
+            auto& lfoEngine = proc.getLfoEngine();
+            for (int li = 0; li < LfoEngine::numLfos; ++li)
+            {
+                auto& lfo = lfoEngine.getLfo (li);
+                for (auto& t : lfo.targets)
+                    if (t.type == LfoTarget::Macro && t.macroIndex == i)
+                    {
+                        lfo.depth = juce::jlimit (0.0f, 1.0f, newDepth);
+                        lfoPanel.updatePhase();
+                        return;
+                    }
+            }
+        };
 
         // Accept LFO drag-drop on macro knobs → add as LFO target
         macroKnobs[i].onLfoDropped = [this, i] (int lfoIdx) {
@@ -164,6 +234,9 @@ void ChainHostEditor::timerCallback()
     for (int i = 0; i < MacroManager::numMacros; ++i)
     {
         macroKnobs[i].setValue (proc.getParameters()[i]->getValue(), false);
+
+        // Skip mod depth update while user is dragging the halo
+        if (macroKnobs[i].isDraggingHalo()) continue;
 
         // Compute mod depth: sum of all LFOs targeting this macro
         float totalMod = 0.0f;
@@ -257,13 +330,13 @@ void ChainHostEditor::paint (juce::Graphics& g)
             int cx = col * cellW;
             int cy = gridTop + row * cellH;
             // Cell bg
-            g.setColour (idx == selectedMacro ? Colors::accent.withAlpha (0.12f) : Colors::surface.withAlpha (0.15f));
+            g.setColour (Colors::surface.withAlpha (0.15f));
             g.fillRect (cx, cy, cellW, cellH);
             // Cell border
             g.setColour (Colors::border.withAlpha (0.3f));
             g.drawRect (cx, cy, cellW, cellH, 1);
             // Macro number — top-left
-            g.setColour (idx == selectedMacro ? Colors::accent : Colors::textDim.withAlpha (0.6f));
+            g.setColour (Colors::textDim.withAlpha (0.6f));
             g.setFont (juce::Font (juce::FontOptions (11.0f).withStyle ("Bold")));
             g.drawText (juce::String (idx + 1), cx + 4, cy + 2, 14, 12, juce::Justification::centredLeft);
 
@@ -332,9 +405,9 @@ void ChainHostEditor::resized()
         int cy = gridTop + row2 * cellH;
         // LEARN pill above knob
         macroLearnBtns[i].setBounds (cx + 6, cy + 2, cellW - 12, 14);
-        // Knob centered with halo space
-        int knobSz = juce::jmin (cellW - 16, cellH - 44);
-        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 16, knobSz, knobSz + 8);
+        // Knob centered with halo space — smaller to fit cell
+        int knobSz = juce::jmin (cellW - 24, cellH - 48);
+        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 18, knobSz, knobSz + 8);
         // Label at bottom
         macroLabels[i].setBounds (cx + 2, cy + cellH - 14, cellW - 4, 12);
         // Drag handle + link at bottom corners

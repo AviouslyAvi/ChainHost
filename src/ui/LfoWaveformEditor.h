@@ -24,7 +24,7 @@ public:
     void setEnabled (bool e) { lfoEnabled = e; }
     std::function<void()> onChanged;
 
-    enum Tool { PointerTool, FlatTool, RampUpTool, RampDownTool };
+    enum Tool { PointerTool, FlatTool, RampUpTool, RampDownTool, EraseTool };
     Tool currentTool = PointerTool;
     void setTool (Tool t) { currentTool = t; repaint(); }
     Tool getTool() const { return currentTool; }

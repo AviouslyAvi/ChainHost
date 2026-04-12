@@ -30,6 +30,7 @@ private:
     void timerCallback() override;
     ChainHostProcessor& proc;
     ChainHostLookAndFeel laf;
+    juce::TooltipWindow tooltipWindow { this, 500 }; // shows tooltips after 500ms hover
 
     melatonin::DropShadow headerShadow { { juce::Colours::black.withAlpha (0.4f), 12, { 0, 4 } } };
 
@@ -66,7 +67,7 @@ private:
     juce::Label macroLabels[MacroManager::numMacros];
 
     // Drag handle for each macro — shows ✥ icon, draggable onto target params
-    class MacroDragHandle : public juce::Component
+    class MacroDragHandle : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         MacroDragHandle (int idx) : macroIndex (idx) {}
@@ -81,7 +82,7 @@ private:
     juce::TextButton macroLearnBtns[MacroManager::numMacros];
 
     // Link button — draws a chain icon, opens plugin param picker
-    class MacroLinkButton : public juce::Component
+    class MacroLinkButton : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         MacroLinkButton() {}

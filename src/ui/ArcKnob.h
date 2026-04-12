@@ -23,6 +23,7 @@ public:
     void setShowPercentage (bool b) { showPercentage = b; repaint(); }
     void setModDepth (float d) { modDepth = d; repaint(); }
     float getModDepth() const { return modDepth; }
+    bool isDraggingHalo() const { return draggingModDepth; }
 
     juce::Slider& getSlider() { return slider; }
     std::function<void()> onValueChange;
@@ -40,6 +41,10 @@ public:
     std::function<void (int)> onMacroDropped;
     // Called when an LFO is dropped on this knob: (lfoIndex)
     std::function<void (int)> onLfoDropped;
+    // Called on right-click to build a context menu
+    std::function<void (juce::PopupMenu&)> onBuildContextMenu;
+    // Called when a context menu item is selected
+    std::function<void (int)> onContextMenuResult;
 
 private:
     juce::Slider slider;
@@ -59,6 +64,8 @@ private:
     void getArcGeometry (float& cx, float& cy, float& radius,
                          float& startAngle, float& arcRange) const;
     bool hitTestHalo (float mx, float my) const;
+
+    void mouseDown (const juce::MouseEvent&) override;
 
     // Transparent overlay that sits on top of the slider to catch halo clicks
     struct HaloOverlay : public juce::Component

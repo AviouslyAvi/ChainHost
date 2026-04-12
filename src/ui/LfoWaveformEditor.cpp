@@ -149,7 +149,7 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
                 g.setColour (Colors::lfoBlue);
 
             bool isLoopback = (*breakpoints)[(size_t) i].isLoopback;
-            float radius = isSelected ? 5.0f : (isLoopback ? 5.5f : 4.0f);
+            float radius = isSelected ? 6.5f : (isLoopback ? 7.0f : 5.5f);
             g.fillEllipse (pt.x - radius, pt.y - radius, radius * 2.0f, radius * 2.0f);
             g.setColour (isLoopback ? Colors::accent : Colors::text);
             g.drawEllipse (pt.x - radius, pt.y - radius, radius * 2.0f, radius * 2.0f, isLoopback ? 1.5f : 1.0f);
@@ -175,7 +175,7 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
             float cy = b.getY() + (1.0f - midVal) * h;
 
             bool isActiveCurve = (draggingCurve && curveSegIndex == i);
-            float r = isActiveCurve ? 4.0f : 3.0f;
+            float r = isActiveCurve ? 5.5f : 4.0f;
             g.setColour (isActiveCurve ? Colors::accent : Colors::textDim.withAlpha (0.6f));
             g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
             g.setColour (Colors::text.withAlpha (0.5f));
@@ -243,6 +243,23 @@ void LfoWaveformEditor::mouseDown (const juce::MouseEvent& e)
     auto b = getLocalBounds().toFloat();
     float mx = (float) e.x, my = (float) e.y;
     bool snapEnabled = ! e.mods.isAltDown();
+
+    // Erase tool: remove breakpoints near click
+    if (currentTool == EraseTool)
+    {
+        pushUndo();
+        isDrawing = true;
+        float w = b.getWidth(), h = b.getHeight();
+        int hit = hitTestBreakpoint (mx, my, w, h);
+        if (hit >= 0 && (int) breakpoints->size() > 2)
+        {
+            breakpoints->erase (breakpoints->begin() + hit);
+            selectedIndices.clear();
+            if (onChanged) onChanged();
+        }
+        repaint();
+        return;
+    }
 
     // Flat / RampUp / RampDown tools: draw grid-snapped segments
     if (currentTool == FlatTool || currentTool == RampUpTool || currentTool == RampDownTool)
@@ -456,6 +473,21 @@ void LfoWaveformEditor::mouseDrag (const juce::MouseEvent& e)
     auto b = getLocalBounds().toFloat();
     float mx = (float) e.x, my = (float) e.y;
     bool snapEnabled = ! e.mods.isAltDown();
+
+    // Erase tool drag: sweep-delete breakpoints
+    if (isDrawing && currentTool == EraseTool)
+    {
+        float w = b.getWidth(), h = b.getHeight();
+        int hit = hitTestBreakpoint (mx, my, w, h);
+        if (hit >= 0 && (int) breakpoints->size() > 2)
+        {
+            breakpoints->erase (breakpoints->begin() + hit);
+            selectedIndices.clear();
+            if (onChanged) onChanged();
+            repaint();
+        }
+        return;
+    }
 
     // Drawing tool drag: paint segments as mouse moves
     if (isDrawing && (currentTool == FlatTool || currentTool == RampUpTool || currentTool == RampDownTool))

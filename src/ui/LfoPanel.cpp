@@ -14,6 +14,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     enableButton.setClickingTogglesState (true);
     enableButton.setColour (juce::TextButton::textColourOffId, Colors::text);
     enableButton.setColour (juce::TextButton::textColourOnId, Colors::text);
+    enableButton.setTooltip ("Enable or disable this LFO");
     enableButton.onClick = [this]() {
         auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
         lfo.enabled = enableButton.getToggleState();
@@ -48,8 +49,8 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
         {
             int div = juce::jlimit (0, (int) NumSyncDivs - 1, juce::roundToInt (rateKnob.getValue()));
             lfo.syncDiv = (SyncDiv) div;
-            rateKnob.setSuffix ("");
-            // Update displayed text to show division name
+            syncDivBox.setSelectedId (div + 1, juce::dontSendNotification);
+            rateKnob.setLabel (syncDivName ((SyncDiv) div));
         }
         else
             lfo.rate = rateKnob.getValue();
@@ -86,6 +87,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     };
 
     styleToggle (syncButton);
+    syncButton.setTooltip ("Toggle tempo sync — syncs LFO rate to your DAW's BPM");
     syncButton.onClick = [this]() {
         auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
         lfo.tempoSync = ! lfo.tempoSync;
@@ -94,6 +96,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addAndMakeVisible (syncButton);
 
     styleToggle (retrigButton);
+    retrigButton.setTooltip ("Retrigger — restarts LFO phase on each new note");
     retrigButton.onClick = [this]() {
         auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
         lfo.retrigger = ! lfo.retrigger;
@@ -102,6 +105,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addAndMakeVisible (retrigButton);
 
     styleToggle (polarButton);
+    polarButton.setTooltip ("Unipolar (0 to 1) or Bipolar (-1 to 1) output range");
     polarButton.onClick = [this]() {
         auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
         lfo.unipolar = ! lfo.unipolar;
@@ -110,6 +114,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addAndMakeVisible (polarButton);
 
     styleToggle (envButton);
+    envButton.setTooltip ("Envelope mode — LFO plays once and stops (one-shot)");
     envButton.onClick = [this]() {
         auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
         lfo.envelopeMode = ! lfo.envelopeMode;
@@ -119,6 +124,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addAndMakeVisible (envButton);
 
     styleToggle (directionButton);
+    directionButton.setTooltip ("Playback direction: Forward, Reverse, or Ping-Pong");
     directionButton.onClick = [this]() {
         auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
         int d = ((int) lfo.direction + 1) % 3;
@@ -129,11 +135,22 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
 
     for (int d = 0; d < NumSyncDivs; ++d)
         syncDivBox.addItem (syncDivName ((SyncDiv) d), d + 1);
+    syncDivBox.addSeparator();
+    syncDivBox.addItem ("Hz", NumSyncDivs + 1);  // Hz option at the end
     syncDivBox.setColour (juce::ComboBox::backgroundColourId, Colors::surfaceRaised);
     syncDivBox.setColour (juce::ComboBox::textColourId, Colors::text);
     syncDivBox.setColour (juce::ComboBox::outlineColourId, Colors::border);
     syncDivBox.onChange = [this]() {
-        proc.getLfoEngine().getLfo (activeLfo).syncDiv = (SyncDiv) (syncDivBox.getSelectedId() - 1);
+        auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
+        int id = syncDivBox.getSelectedId();
+        if (id == NumSyncDivs + 1)
+        {
+            // Hz mode — switch to free running
+            lfo.tempoSync = false;
+            syncControlsToLfo();
+        }
+        else if (id > 0)
+            lfo.syncDiv = (SyncDiv) (id - 1);
     };
     addAndMakeVisible (syncDivBox);
 
@@ -150,6 +167,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
             toolFlat.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             toolRampUp.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             toolRampDown.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolErase.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             btn.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
         };
         addAndMakeVisible (btn);
@@ -158,6 +176,12 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     styleToolBtn (toolFlat, LfoWaveformEditor::FlatTool);
     styleToolBtn (toolRampUp, LfoWaveformEditor::RampUpTool);
     styleToolBtn (toolRampDown, LfoWaveformEditor::RampDownTool);
+    styleToolBtn (toolErase, LfoWaveformEditor::EraseTool);
+    toolPointer.setTooltip ("Pointer — click to select/move breakpoints, drag handles to adjust tension");
+    toolFlat.setTooltip ("Flat — click to insert a flat segment between two points");
+    toolRampUp.setTooltip ("Ramp Up — click to insert a rising ramp segment");
+    toolRampDown.setTooltip ("Ramp Down — click to insert a falling ramp segment");
+    toolErase.setTooltip ("Erase — click or drag over breakpoints to delete them");
     toolPointer.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
 
     // Grid size controls
@@ -188,20 +212,24 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
 
     addTargetButton.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.3f));
     addTargetButton.setColour (juce::TextButton::textColourOffId, Colors::text);
+    addTargetButton.setTooltip ("Pick a plugin parameter or macro to modulate with this LFO");
     addTargetButton.onClick = [this]() { showTargetMenu (activeLfo); };
     addAndMakeVisible (addTargetButton);
 
     // LFO drag handle
     lfoDragHandle.lfoIndex = activeLfo;
+    lfoDragHandle.setTooltip ("Drag onto a macro knob or parameter to assign this LFO");
     addAndMakeVisible (lfoDragHandle);
 
     // LFO link button
+    lfoLinkBtn.setTooltip ("Browse and select a plugin parameter to modulate");
     lfoLinkBtn.onClick = [this]() { showLfoLinkMenu(); };
     addAndMakeVisible (lfoLinkBtn);
 
     // LFO learn button
     lfoLearnBtn.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised.withAlpha (0.7f));
     lfoLearnBtn.setColour (juce::TextButton::textColourOffId, Colors::textDim);
+    lfoLearnBtn.setTooltip ("Click, then move a parameter in your plugin — ChainHost will auto-assign the LFO to it");
     lfoLearnBtn.onClick = [this]() {
         if (lfoLearning) stopLfoLearn();
         else startLfoLearn();
@@ -221,33 +249,39 @@ void LfoPanel::paint (juce::Graphics& g)
     int targetsW = 180;
     int targetsX = getWidth() - targetsW;
     int wfRight = targetsX - 10;
-    int toolY = 46;
-    int wfBottom = toolY + 16 + getHeight() - 200;
-    int gridRowY = wfBottom + 2;
+    int toolY = 54;
+    int tbH = 22;
+    int wfH = getHeight() - 214 - 16;
+    int wfTop = toolY + tbH + 2;
+    int gridRowY = wfTop + wfH + 2;
 
     // --- Section boxes ---
     // Controls row (SYNC, RETRIG, etc.)
     g.setColour (Colors::border.withAlpha (0.25f));
-    g.drawRoundedRectangle (6.0f, 24.0f, (float) wfRight - 2.0f, 20.0f, 3.0f, 1.0f);
+    g.drawRoundedRectangle (6.0f, 28.0f, (float) wfRight - 2.0f, 24.0f, 3.0f, 1.0f);
 
     // Tool bar box
-    g.drawRoundedRectangle (6.0f, (float) toolY - 2.0f, (float) wfRight - 2.0f, 16.0f, 3.0f, 1.0f);
+    g.drawRoundedRectangle (6.0f, (float) toolY - 2.0f, (float) wfRight - 2.0f, (float) tbH + 4.0f, 3.0f, 1.0f);
 
     // Waveform box
-    int wfH = wfBottom - toolY - 16;
     g.setColour (Colors::border.withAlpha (0.15f));
-    g.drawRoundedRectangle (8.0f, (float) toolY + 14.0f, (float) wfRight - 12.0f, (float) wfH + 4.0f, 2.0f, 1.0f);
+    g.drawRoundedRectangle (8.0f, (float) wfTop - 2.0f, (float) wfRight - 12.0f, (float) wfH + 4.0f, 2.0f, 1.0f);
 
     // Grid controls labels
     g.setColour (Colors::textDim.withAlpha (0.5f));
     g.setFont (juce::Font (juce::FontOptions (8.0f)));
-    g.drawText ("X", wfRight - 114, gridRowY, 12, 16, juce::Justification::centredRight);
-    g.drawText ("Y", wfRight - 64, gridRowY, 12, 16, juce::Justification::centredRight);
+    g.drawText ("X", wfRight - 114, gridRowY, 12, 18, juce::Justification::centredRight);
+    g.drawText ("Y", wfRight - 64, gridRowY, 12, 18, juce::Justification::centredRight);
 
-    // Knob section box
-    int ky = gridRowY + 22;
+    // Knob section box — centered under waveform
+    int knobW = 64;
+    int knobTotalW = knobW * 6;
+    int wfW = wfRight - 10;
+    int knobStartX = 10 + (wfW - knobTotalW) / 2;
+    int ky = gridRowY + 24;
     g.setColour (Colors::border.withAlpha (0.25f));
-    g.drawRoundedRectangle (6.0f, (float) ky - 2.0f, 274.0f, 74.0f, 3.0f, 1.0f);
+    g.drawRoundedRectangle ((float) knobStartX - 4.0f, (float) ky - 2.0f,
+        (float) knobTotalW + 8.0f, 86.0f, 3.0f, 1.0f);
 
     // --- Targets section (narrow right column) ---
     g.setColour (Colors::border.withAlpha (0.25f));
@@ -268,50 +302,60 @@ void LfoPanel::paint (juce::Graphics& g)
 
 void LfoPanel::resized()
 {
-    int tabW = 48;
-    for (int i = 0; i < LfoEngine::numLfos; ++i)
-        lfoTabs[i].setBounds (10 + i * (tabW + 3), 4, tabW, 18);
-
-    int ctrlX = 10 + LfoEngine::numLfos * (tabW + 3) + 6;
-    enableButton.setBounds (ctrlX, 4, 32, 18);
-
-    shapeBox.setBounds (ctrlX + 38, 4, 110, 18);
-    int my = 26;
-    syncButton.setBounds (10, my, 38, 16);
-    syncDivBox.setBounds (52, my, 68, 16);
-    retrigButton.setBounds (126, my, 36, 16);
-    polarButton.setBounds (166, my, 32, 16);
-    envButton.setBounds (202, my, 32, 16);
-    directionButton.setBounds (238, my, 32, 16);
-
     int targetsW = 180;
     int targetsX = getWidth() - targetsW;
     int wfRight = targetsX - 10;
 
-    // Tool buttons above waveform
-    int toolY = 46;
-    toolPointer.setBounds (10, toolY, 30, 14);
-    toolFlat.setBounds (43, toolY, 36, 14);
-    toolRampUp.setBounds (82, toolY, 24, 14);
-    toolRampDown.setBounds (109, toolY, 24, 14);
+    // LFO tabs row — bigger buttons
+    int tabW = 56;
+    int tabH = 22;
+    for (int i = 0; i < LfoEngine::numLfos; ++i)
+        lfoTabs[i].setBounds (10 + i * (tabW + 4), 4, tabW, tabH);
 
-    int wfH = getHeight() - 200 - 16;  // dynamic height
-    waveformEditor.setBounds (10, toolY + 16, wfRight - 10, wfH);
+    int ctrlX = 10 + LfoEngine::numLfos * (tabW + 4) + 8;
+    enableButton.setBounds (ctrlX, 4, 36, tabH);
+    shapeBox.setBounds (ctrlX + 42, 4, 120, tabH);
 
-    // Grid size controls below waveform
-    int gridY2 = toolY + 16 + wfH + 2;
-    gridXBox.setBounds (wfRight - 100, gridY2, 40, 16);
-    gridYBox.setBounds (wfRight - 50, gridY2, 40, 16);
+    // Controls row — bigger buttons
+    int my = 30;
+    int btnH = 20;
+    syncButton.setBounds (10, my, 44, btnH);
+    syncDivBox.setBounds (58, my, 72, btnH);
+    retrigButton.setBounds (136, my, 42, btnH);
+    polarButton.setBounds (182, my, 36, btnH);
+    envButton.setBounds (222, my, 36, btnH);
+    directionButton.setBounds (262, my, 38, btnH);
 
-    int ky = gridY2 + 22;
-    int knobW = 44;
-    int knobH = 68;
-    rateKnob.setBounds (10, ky, knobW, knobH);
-    depthKnob.setBounds (10 + knobW, ky, knobW, knobH);
-    delayKnob.setBounds (10 + knobW * 2, ky, knobW, knobH);
-    phaseKnob.setBounds (10 + knobW * 3, ky, knobW, knobH);
-    riseKnob.setBounds (10 + knobW * 4, ky, knobW, knobH);
-    smoothKnob.setBounds (10 + knobW * 5, ky, knobW, knobH);
+    // Tool buttons above waveform — larger
+    int toolY = 54;
+    int tbH = 22;
+    toolPointer.setBounds (10, toolY, 40, tbH);
+    toolFlat.setBounds (54, toolY, 40, tbH);
+    toolRampUp.setBounds (98, toolY, 32, tbH);
+    toolRampDown.setBounds (134, toolY, 32, tbH);
+    toolErase.setBounds (170, toolY, 36, tbH);
+
+    int wfH = getHeight() - 210 - 16;  // dynamic height
+    waveformEditor.setBounds (10, toolY + tbH + 2, wfRight - 10, wfH);
+
+    // Grid size controls below waveform — right-aligned to waveform
+    int gridY2 = toolY + tbH + 2 + wfH + 2;
+    gridXBox.setBounds (wfRight - 100, gridY2, 40, 18);
+    gridYBox.setBounds (wfRight - 50, gridY2, 40, 18);
+
+    // Knob section — centered under the waveform area
+    int ky = gridY2 + 24;
+    int knobW = 64;
+    int knobH = 80;
+    int knobTotalW = knobW * 6;
+    int wfW = wfRight - 10;  // waveform width
+    int knobStartX = 10 + (wfW - knobTotalW) / 2;
+    rateKnob.setBounds (knobStartX, ky, knobW, knobH);
+    depthKnob.setBounds (knobStartX + knobW, ky, knobW, knobH);
+    delayKnob.setBounds (knobStartX + knobW * 2, ky, knobW, knobH);
+    phaseKnob.setBounds (knobStartX + knobW * 3, ky, knobW, knobH);
+    riseKnob.setBounds (knobStartX + knobW * 4, ky, knobW, knobH);
+    smoothKnob.setBounds (knobStartX + knobW * 5, ky, knobW, knobH);
 
     // Targets column (narrow right side)
     int tBtnX = targetsX;

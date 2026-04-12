@@ -9,6 +9,7 @@ ArcKnob::ArcKnob (const juce::String& lbl, juce::Colour arcCol)
     slider.setDoubleClickReturnValue (true, 0.0);
     slider.setColour (juce::Slider::rotarySliderFillColourId, arcColour);
     slider.setColour (juce::Slider::trackColourId, Colors::border);
+    slider.setPopupMenuEnabled (false);
     slider.onValueChange = [this]() { repaint(); if (onValueChange) onValueChange(); };
     addAndMakeVisible (slider);
 
@@ -21,11 +22,12 @@ void ArcKnob::resized()
     auto b = getLocalBounds();
     int labelH = label.isEmpty() ? 0 : 14;
     int valueH = showPercentage ? 12 : 0;
-    auto sliderBounds = b.withTrimmedBottom (labelH + valueH).withTrimmedTop (8);
+    // Reserve 8px top and 6px each side for the halo ring
+    auto sliderBounds = b.withTrimmedBottom (labelH + valueH).withTrimmedTop (8).reduced (6, 0);
     int sz = juce::jmin (sliderBounds.getWidth(), sliderBounds.getHeight());
     auto centred = sliderBounds.withSizeKeepingCentre (sz, sz);
     slider.setBounds (centred);
-    haloOverlay.setBounds (b.withTrimmedBottom (labelH + valueH));  // slightly larger to cover the halo ring
+    haloOverlay.setBounds (b.withTrimmedBottom (labelH + valueH));
 }
 
 //==============================================================================
@@ -144,6 +146,26 @@ void ArcKnob::setArcColour (juce::Colour c)
     arcColour = c;
     slider.setColour (juce::Slider::rotarySliderFillColourId, c);
     repaint();
+}
+
+//==============================================================================
+// Right-click context menu
+void ArcKnob::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu() && onBuildContextMenu)
+    {
+        juce::PopupMenu menu;
+        onBuildContextMenu (menu);
+        if (menu.getNumItems() > 0)
+        {
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (
+                { e.getScreenX(), e.getScreenY(), 1, 1 }),
+                [this] (int result) {
+                    if (result > 0 && onContextMenuResult)
+                        onContextMenuResult (result);
+                });
+        }
+    }
 }
 
 //==============================================================================
