@@ -21,6 +21,8 @@ public:
     void setSuffix (const juce::String& s) { suffix = s; repaint(); }
     void setDefaultValue (float v) { defaultValue = v; }
     void setShowPercentage (bool b) { showPercentage = b; repaint(); }
+    void setModDepth (float d) { modDepth = d; repaint(); }
+    float getModDepth() const { return modDepth; }
 
     juce::Slider& getSlider() { return slider; }
     std::function<void()> onValueChange;
@@ -39,6 +41,7 @@ private:
     juce::String label, suffix = "%";
     juce::Colour arcColour;
     float defaultValue = 0.0f;
+    float modDepth = 0.0f;  // -1..+1 normalised modulation depth for blue halo
     bool showPercentage = true;
     bool macroDragHover = false;
 };

@@ -408,6 +408,30 @@ void LfoPanel::updatePhase()
     smoothKnob.setValue (lfo.smooth, false);
     delayKnob.setValue (lfo.delayTime, false);
     phaseKnob.setValue (lfo.startPhase, false);
+
+    // ── Blue Halo: compute modulation depth per knob from macro mappings ──
+    FabKnob* knobs[] = { &rateKnob, &depthKnob, &riseKnob, &smoothKnob, &delayKnob, &phaseKnob };
+    auto& mm = proc.getMacroManager();
+
+    for (int kp = 0; kp < InternalParams::paramsPerLfo; ++kp)
+    {
+        int internalIdx = activeLfo * InternalParams::paramsPerLfo + kp;
+        float totalMod = 0.0f;
+
+        for (int mi = 0; mi < MacroManager::numMacros; ++mi)
+        {
+            for (auto& m : mm.getMappings (mi))
+            {
+                if (m.slotUid == InternalParams::uid && m.paramIndex == internalIdx)
+                {
+                    float macroVal = mm.getLastValue (mi);
+                    totalMod += macroVal * (m.maxValue - m.minValue);
+                }
+            }
+        }
+
+        knobs[kp]->setModDepth (totalMod);
+    }
 }
 
 void LfoPanel::setActiveLfo (int index)

@@ -25,6 +25,43 @@ void FabKnob::resized()
 
 void FabKnob::paint (juce::Graphics& g)
 {
+    // ── Blue Halo: modulation depth arc ──────────────────────────
+    if (std::abs (modDepth) > 0.001f)
+    {
+        constexpr float startAngle = juce::MathConstants<float>::pi * 1.25f;   // 7 o'clock
+        constexpr float endAngle   = juce::MathConstants<float>::pi * 2.75f;   // 5 o'clock
+        constexpr float arcRange   = endAngle - startAngle;
+
+        auto sb = slider.getBounds().toFloat().reduced (2.0f);
+        float radius = juce::jmin (sb.getWidth(), sb.getHeight()) * 0.5f;
+        float cx = sb.getCentreX(), cy = sb.getCentreY();
+
+        float norm = (float) ((slider.getValue() - slider.getMinimum())
+                              / (slider.getMaximum() - slider.getMinimum()));
+        float valueAngle = startAngle + norm * arcRange;
+        float modAngle = valueAngle + modDepth * arcRange;
+        modAngle = juce::jlimit (startAngle, endAngle, modAngle);
+
+        float fromA = juce::jmin (valueAngle, modAngle);
+        float toA   = juce::jmax (valueAngle, modAngle);
+
+        if (toA - fromA > 0.01f)
+        {
+            juce::Path modArc;
+            modArc.addCentredArc (cx, cy, radius + 1.5f, radius + 1.5f, 0.0f,
+                                  fromA, toA, true);
+
+            // Outer glow
+            g.setColour (Colors::lfoBlue.withAlpha (0.12f));
+            g.strokePath (modArc, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved,
+                                                         juce::PathStrokeType::rounded));
+            // Main ring
+            g.setColour (Colors::lfoBlue.withAlpha (0.55f));
+            g.strokePath (modArc, juce::PathStrokeType (2.5f, juce::PathStrokeType::curved,
+                                                         juce::PathStrokeType::rounded));
+        }
+    }
+
     if (showPercentage)
     {
         float norm = (float) slider.getValue();

@@ -1,0 +1,70 @@
+name: Build ChainHost
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ── macOS ──────────────────────────────────────────────────────
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package DMG
+        run: ./package.sh --skip-build
+
+      - name: Upload Standalone
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainHost-macOS-Standalone
+          path: build/ChainHost_artefacts/Standalone/ChainHost.app
+
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainHost-macOS-VST3
+          path: build/ChainHost_artefacts/VST3/ChainHost.vst3
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainHost-macOS-DMG
+          path: build/ChainHost-*-macOS.dmg
+
+  # ── Windows ────────────────────────────────────────────────────
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Upload Standalone
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainHost-Windows-Standalone
+          path: build/ChainHost_artefacts/Release/Standalone/
+
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainHost-Windows-VST3
+          path: build/ChainHost_artefacts/Release/VST3/

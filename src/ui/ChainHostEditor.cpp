@@ -150,10 +150,23 @@ void ChainHostEditor::timerCallback()
 
     lfoPanel.updatePhase();
 
-    // Sync LFO knob visuals when macros drive internal params
+    // Sync macro knob values and blue halo from LFO modulation
+    auto& lfoEngine = proc.getLfoEngine();
     for (int i = 0; i < MacroManager::numMacros; ++i)
     {
         macroKnobs[i].setValue (proc.getParameters()[i]->getValue(), false);
+
+        // Compute mod depth: sum of all LFOs targeting this macro
+        float totalMod = 0.0f;
+        for (int li = 0; li < LfoEngine::numLfos; ++li)
+        {
+            auto& lfo = lfoEngine.getLfo (li);
+            if (! lfo.enabled) continue;
+            for (auto& t : lfo.targets)
+                if (t.type == LfoTarget::Macro && t.macroIndex == i)
+                    totalMod += lfo.depth;
+        }
+        macroKnobs[i].setModDepth (totalMod);
     }
 }
 
