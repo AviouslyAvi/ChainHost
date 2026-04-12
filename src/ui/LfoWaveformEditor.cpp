@@ -192,17 +192,45 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
         g.drawRect (selectRect, 1.0f);
     }
 
-    // Phase cursor
+    // Phase cursor (direction-aware)
     if (lfoEnabled && hasPoints)
     {
-        float val = LfoEngine::customWaveformAt (*breakpoints, currentPhase);
-        float px = b.getX() + currentPhase * w;
+        float effectivePhase = currentPhase;
+        if (direction == LfoEngine::Reverse)
+            effectivePhase = 1.0f - currentPhase;
+        else if (direction == LfoEngine::PingPong)
+            effectivePhase = (currentPhase < 0.5f) ? (currentPhase * 2.0f) : (2.0f - currentPhase * 2.0f);
+
+        float val = LfoEngine::customWaveformAt (*breakpoints, effectivePhase);
+        float px = b.getX() + effectivePhase * w;
         float py = b.getY() + (1.0f - val) * h;
 
         g.setColour (Colors::lfoBlue.withAlpha (0.3f));
         g.drawLine (px, b.getY(), px, b.getBottom(), 1.0f);
         g.setColour (Colors::lfoBlue);
         g.fillEllipse (px - 3.5f, py - 3.5f, 7.0f, 7.0f);
+    }
+
+    // Tension percentage tooltip (shown when hovering or dragging a curve handle)
+    {
+        int showIdx = draggingCurve ? curveSegIndex : hoverCurveIndex;
+        if (showIdx >= 0 && breakpoints && showIdx < (int) breakpoints->size())
+        {
+            float tension = (*breakpoints)[(size_t) showIdx].curve;
+            int pct = juce::roundToInt (tension * 100.0f);
+            juce::String text = (pct >= 0 ? "+" : "") + juce::String (pct) + "%";
+
+            auto& bp0 = (*breakpoints)[(size_t) showIdx];
+            auto& bp1 = (*breakpoints)[(size_t) showIdx + 1];
+            float midPhase = (bp0.x + bp1.x) * 0.5f;
+            float midVal = LfoEngine::customWaveformAt (*breakpoints, midPhase);
+            float tx = b.getX() + midPhase * w;
+            float ty = b.getY() + (1.0f - midVal) * h - 14.0f;
+
+            g.setColour (Colors::text.withAlpha (0.9f));
+            g.setFont (juce::Font (juce::FontOptions (9.0f)));
+            g.drawText (text, (int)(tx - 16), (int)ty, 32, 12, juce::Justification::centred);
+        }
     }
 
     g.setColour (Colors::border.withAlpha (0.5f));
@@ -585,6 +613,20 @@ void LfoWaveformEditor::mouseUp (const juce::MouseEvent&)
     draggingSelection = false;
     movingSelected = false;
     isDrawing = false;
+    repaint();
+}
+
+void LfoWaveformEditor::mouseMove (const juce::MouseEvent& e)
+{
+    if (! breakpoints) return;
+    auto b = getLocalBounds().toFloat();
+    float mx = (float) e.x, my = (float) e.y;
+    int newHover = hitTestCurveHandle (mx, my, b.getWidth(), b.getHeight());
+    if (newHover != hoverCurveIndex)
+    {
+        hoverCurveIndex = newHover;
+        repaint();
+    }
 }
 
 int LfoWaveformEditor::hitTestCurveHandle (float mx, float my, float w, float h) const

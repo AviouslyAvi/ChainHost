@@ -14,11 +14,13 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
     using juce::Component::keyPressed;
     bool keyPressed (const juce::KeyPress& key, juce::Component* origin) override;
 
     void setBreakpoints (std::vector<LfoBreakpoint>* bp) { breakpoints = bp; repaint(); }
     void setPhase (float p) { currentPhase = p; }
+    void setDirection (LfoEngine::Direction d) { direction = d; }
     void setEnabled (bool e) { lfoEnabled = e; }
     std::function<void()> onChanged;
 
@@ -42,6 +44,7 @@ private:
     int curveSegIndex = -1;
     float currentPhase = 0.0f;
     bool lfoEnabled = false;
+    LfoEngine::Direction direction = LfoEngine::Forward;
 
     // Multi-select
     std::set<int> selectedIndices;
@@ -53,6 +56,8 @@ private:
 
     // Drawing
     bool isDrawing = false;
+
+    int hoverCurveIndex = -1;  // curve handle index under mouse
 
     int hitTestCurveHandle (float mx, float my, float w, float h) const;
 

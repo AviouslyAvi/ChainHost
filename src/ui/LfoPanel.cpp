@@ -191,6 +191,24 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addTargetButton.onClick = [this]() { showTargetMenu (activeLfo); };
     addAndMakeVisible (addTargetButton);
 
+    // LFO drag handle
+    lfoDragHandle.lfoIndex = activeLfo;
+    addAndMakeVisible (lfoDragHandle);
+
+    // LFO link button
+    lfoLinkBtn.onClick = [this]() { showLfoLinkMenu(); };
+    addAndMakeVisible (lfoLinkBtn);
+
+    // LFO learn button
+    lfoLearnBtn.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised.withAlpha (0.7f));
+    lfoLearnBtn.setColour (juce::TextButton::textColourOffId, Colors::textDim);
+    lfoLearnBtn.onClick = [this]() {
+        if (lfoLearning) stopLfoLearn();
+        else startLfoLearn();
+    };
+    addAndMakeVisible (lfoLearnBtn);
+
+    startTimer (16); // 60fps playhead
     refresh();
 }
 
@@ -291,7 +309,10 @@ void LfoPanel::resized()
     smoothKnob.setBounds (10 + knobW * 5, ky, knobW, knobH);
 
     int targetsX = getWidth() / 2 + 10;
-    addTargetButton.setBounds (targetsX + 90, 26, 72, 18);
+    addTargetButton.setBounds (targetsX + 90, 26, 52, 18);
+    lfoDragHandle.setBounds (targetsX + 146, 26, 22, 18);
+    lfoLinkBtn.setBounds (targetsX + 172, 26, 22, 18);
+    lfoLearnBtn.setBounds (targetsX + 198, 26, 44, 18);
 
     int ty = 44;
     for (auto* tr : targetRows)
@@ -357,6 +378,7 @@ void LfoPanel::syncControlsToLfo()
     waveformEditor.setBreakpoints (&lfo.breakpoints);
     waveformEditor.setEnabled (lfo.enabled);
     waveformEditor.setPhase (lfo.phase);
+    waveformEditor.setDirection (lfo.direction);
 
     if (! lfo.tempoSync)
         rateKnob.setValue (lfo.rate, false);
@@ -395,11 +417,21 @@ void LfoPanel::refresh()
     resized();
 }
 
-void LfoPanel::updatePhase()
+void LfoPanel::timerCallback()
 {
     auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
     waveformEditor.setPhase (lfo.phase);
+    waveformEditor.setDirection (lfo.direction);
     waveformEditor.repaint();
+
+    if (lfoLearning)
+        checkLfoLearn();
+}
+
+void LfoPanel::updatePhase()
+{
+    auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
+    // Phase animation is now handled by the 60fps timerCallback
 
     // Keep knobs in sync when macros drive LFO params
     if (! lfo.tempoSync)
@@ -435,6 +467,7 @@ void LfoPanel::updatePhase()
 void LfoPanel::setActiveLfo (int index)
 {
     activeLfo = juce::jlimit (0, LfoEngine::numLfos - 1, index);
+    lfoDragHandle.lfoIndex = activeLfo;
     refresh();
 }
 
@@ -553,4 +586,173 @@ void LfoPanel::setupMacroDropHandlers()
     smoothKnob.onModDepthChanged = makeModHandler (3);
     delayKnob.onModDepthChanged  = makeModHandler (4);
     phaseKnob.onModDepthChanged  = makeModHandler (5);
+}
+
+//==============================================================================
+// LFO Drag Handle — paint & drag
+void LfoPanel::LfoDragHandle::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat().reduced (1);
+    g.setColour (Colors::lfoBlue.withAlpha (0.4f));
+    g.fillRoundedRectangle (b, 3.0f);
+
+    // Draw 4-way arrows
+    g.setColour (Colors::text);
+    float cx = b.getCentreX(), cy = b.getCentreY();
+    float armLen = juce::jmin (b.getWidth(), b.getHeight()) * 0.28f;
+    float thick = 1.2f;
+    g.drawLine (cx, cy - armLen, cx, cy + armLen, thick);
+    g.drawLine (cx - armLen, cy, cx + armLen, cy, thick);
+    // Arrowheads
+    float hs = armLen * 0.45f;
+    g.drawLine (cx, cy - armLen, cx - hs, cy - armLen + hs, thick);
+    g.drawLine (cx, cy - armLen, cx + hs, cy - armLen + hs, thick);
+    g.drawLine (cx, cy + armLen, cx - hs, cy + armLen - hs, thick);
+    g.drawLine (cx, cy + armLen, cx + hs, cy + armLen - hs, thick);
+}
+
+void LfoPanel::LfoDragHandle::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.getDistanceFromDragStart() > 4)
+        if (auto* dc = juce::DragAndDropContainer::findParentDragContainerFor (this))
+            dc->startDragging ("lfo:" + juce::String (lfoIndex), this);
+}
+
+//==============================================================================
+// LFO Link Button — paint
+void LfoPanel::LfoLinkButton::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat().reduced (1);
+    g.setColour (Colors::surfaceRaised.withAlpha (0.6f));
+    g.fillRoundedRectangle (b, 3.0f);
+
+    g.setColour (Colors::textDim);
+    float cx = b.getCentreX(), cy = b.getCentreY();
+    float linkW = b.getWidth() * 0.3f, linkH = b.getHeight() * 0.22f;
+    float gap = linkW * 0.25f;
+    g.drawRoundedRectangle (cx - linkW - gap * 0.5f, cy - linkH, linkW * 1.4f, linkH * 2.0f, linkH, 1.2f);
+    g.drawRoundedRectangle (cx + gap * 0.5f - linkW * 0.4f, cy - linkH, linkW * 1.4f, linkH * 2.0f, linkH, 1.2f);
+}
+
+//==============================================================================
+// LFO Link Menu
+void LfoPanel::showLfoLinkMenu()
+{
+    juce::PopupMenu menu;
+    auto& cg = proc.getChainGraph();
+    int itemId = 1;
+    struct PI { juce::AudioProcessorGraph::NodeID nodeId; int paramIdx; };
+    std::vector<PI> lookup;
+
+    // Macros submenu
+    juce::PopupMenu macroSub;
+    for (int i = 0; i < MacroManager::numMacros; ++i)
+    {
+        lookup.push_back ({ {}, -1 }); // sentinel: macroIndex stored via itemId
+        macroSub.addItem (itemId++, "Macro " + juce::String (i + 1));
+    }
+    menu.addSubMenu ("Macros", macroSub);
+
+    // Plugin params
+    for (int ci = 0; ci < cg.getNumChains(); ++ci)
+        for (auto& slot : cg.getChain (ci).slots)
+            if (auto* node = proc.getGraph().getNodeForId (slot.nodeId))
+            {
+                auto& params = node->getProcessor()->getParameters();
+                if (params.isEmpty()) continue;
+                juce::PopupMenu sub;
+                for (int pi = 0; pi < params.size(); ++pi)
+                {
+                    lookup.push_back ({ slot.nodeId, pi });
+                    sub.addItem (itemId++, params[pi]->getName (40));
+                }
+                auto lbl = node->getProcessor()->getName();
+                if (cg.getNumChains() > 1) lbl = "Chain " + juce::String (ci + 1) + " > " + lbl;
+                menu.addSubMenu (lbl, sub);
+            }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (lfoLinkBtn),
+        [this, lookup] (int r)
+        {
+            if (r <= 0 || r > (int) lookup.size()) return;
+            auto& pi = lookup[(size_t)(r - 1)];
+            LfoTarget t;
+            if (pi.paramIdx < 0)
+            {
+                // It's a macro
+                t.type = LfoTarget::Macro;
+                t.macroIndex = r - 1; // first N items are macros
+            }
+            else
+            {
+                t.type = LfoTarget::Parameter;
+                t.nodeId = pi.nodeId;
+                t.paramIndex = pi.paramIdx;
+            }
+            proc.getLfoEngine().addTarget (activeLfo, t);
+            refresh();
+        });
+}
+
+//==============================================================================
+// LFO Learn — snapshot-based parameter detection
+void LfoPanel::startLfoLearn()
+{
+    lfoLearning = true;
+    learnSnapshot.clear();
+    lfoLearnBtn.setColour (juce::TextButton::buttonColourId, Colors::learn.withAlpha (0.5f));
+    lfoLearnBtn.setColour (juce::TextButton::textColourOffId, Colors::learn);
+
+    // Take snapshot of all plugin parameters
+    auto& cg = proc.getChainGraph();
+    for (int ci = 0; ci < cg.getNumChains(); ++ci)
+        for (auto& slot : cg.getChain (ci).slots)
+            if (auto* node = proc.getGraph().getNodeForId (slot.nodeId))
+            {
+                auto& params = node->getProcessor()->getParameters();
+                std::vector<float> vals;
+                vals.reserve ((size_t) params.size());
+                for (auto* p : params) vals.push_back (p->getValue());
+                learnSnapshot[slot.nodeId] = std::move (vals);
+            }
+}
+
+void LfoPanel::stopLfoLearn()
+{
+    lfoLearning = false;
+    learnSnapshot.clear();
+    lfoLearnBtn.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised.withAlpha (0.7f));
+    lfoLearnBtn.setColour (juce::TextButton::textColourOffId, Colors::textDim);
+}
+
+void LfoPanel::checkLfoLearn()
+{
+    if (! lfoLearning) return;
+    auto& cg = proc.getChainGraph();
+    for (int ci = 0; ci < cg.getNumChains(); ++ci)
+        for (auto& slot : cg.getChain (ci).slots)
+        {
+            auto it = learnSnapshot.find (slot.nodeId);
+            if (it == learnSnapshot.end()) continue;
+            if (auto* node = proc.getGraph().getNodeForId (slot.nodeId))
+            {
+                auto& params = node->getProcessor()->getParameters();
+                for (int pi = 0; pi < params.size() && pi < (int) it->second.size(); ++pi)
+                {
+                    float oldVal = it->second[(size_t) pi];
+                    float newVal = params[pi]->getValue();
+                    if (std::abs (newVal - oldVal) > 0.01f)
+                    {
+                        LfoTarget t;
+                        t.type = LfoTarget::Parameter;
+                        t.nodeId = slot.nodeId;
+                        t.paramIndex = pi;
+                        proc.getLfoEngine().addTarget (activeLfo, t);
+                        stopLfoLearn();
+                        refresh();
+                        return;
+                    }
+                }
+            }
+        }
 }
