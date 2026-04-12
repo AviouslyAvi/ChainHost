@@ -149,6 +149,12 @@ void ChainHostEditor::timerCallback()
     vsb.setAlpha (scrollAlpha);
 
     lfoPanel.updatePhase();
+
+    // Sync LFO knob visuals when macros drive internal params
+    for (int i = 0; i < MacroManager::numMacros; ++i)
+    {
+        macroKnobs[i].setValue (proc.getParameters()[i]->getValue(), false);
+    }
 }
 
 void ChainHostEditor::ChainContainer::paint (juce::Graphics& g)
@@ -239,13 +245,32 @@ void ChainHostEditor::paint (juce::Graphics& g)
             g.setFont (juce::Font (juce::FontOptions (11.0f).withStyle ("Bold")));
             g.drawText (juce::String (idx + 1), cx + 4, cy + 2, 14, 12, juce::Justification::centredLeft);
 
-            // Link count — bottom center
+            // Macro name glow
+            {
+                auto& mappings2 = proc.getMacroManager().getMappings (idx);
+                auto glowCol = mappings2.empty() ? Colors::textDim : Colors::accent;
+                g.setFont (juce::Font (juce::FontOptions (8.0f)));
+                for (int pass = 3; pass >= 1; --pass)
+                {
+                    float spread = (float) pass * 1.5f;
+                    g.setColour (glowCol.withAlpha (0.12f / (float) pass));
+                    g.drawText (macroNames[idx],
+                                cx + 2 - (int) spread, cy + cellH - 14 - (int) spread,
+                                cellW - 4 + (int)(spread * 2), 12 + (int)(spread * 2),
+                                juce::Justification::centred);
+                }
+            }
+
+            // Link count — centered on the same control row as drag/link buttons
             auto& mappings = proc.getMacroManager().getMappings (idx);
-            if (!mappings.empty()) {
+            if (! mappings.empty()) {
                 g.setColour (Colors::accent.withAlpha (0.7f));
                 g.setFont (juce::Font (juce::FontOptions (8.0f)));
+                constexpr int controlRowY = 26;
+                constexpr int leftControlW = 26;
+                constexpr int rightControlW = 26;
                 g.drawText (juce::String ((int)mappings.size()) + " link" + (mappings.size() > 1 ? "s" : ""),
-                            cx, cy + cellH - 14, cellW, 12, juce::Justification::centred);
+                            cx + leftControlW, cy + cellH - controlRowY, cellW - leftControlW - rightControlW, 12, juce::Justification::centred);
             }
         }
 

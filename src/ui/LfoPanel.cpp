@@ -129,6 +129,8 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
             toolPointer.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             toolPencil.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             toolEraser.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolLine.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolStairs.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             btn.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
         };
         addAndMakeVisible (btn);
@@ -136,7 +138,35 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     styleToolBtn (toolPointer, LfoWaveformEditor::PointerTool);
     styleToolBtn (toolPencil, LfoWaveformEditor::PencilTool);
     styleToolBtn (toolEraser, LfoWaveformEditor::EraserTool);
+    styleToolBtn (toolLine, LfoWaveformEditor::LineTool);
+    styleToolBtn (toolStairs, LfoWaveformEditor::StairsTool);
     toolPointer.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
+
+    // Grid size controls
+    auto setupGridBox = [] (juce::ComboBox& box, const int sizes[], int count, int defaultVal) {
+        for (int i = 0; i < count; ++i)
+            box.addItem (juce::String (sizes[i]), i + 1);
+        // Select default
+        for (int i = 0; i < count; ++i)
+            if (sizes[i] == defaultVal) { box.setSelectedId (i + 1, juce::dontSendNotification); break; }
+    };
+    static const int gridXSizes[] = { 4, 8, 12, 16, 24, 32 };
+    static const int gridYSizes[] = { 2, 4, 6, 8, 12, 16 };
+    setupGridBox (gridXBox, gridXSizes, 6, waveformEditor.gridX);
+    setupGridBox (gridYBox, gridYSizes, 6, waveformEditor.gridY);
+
+    gridXBox.onChange = [this]() {
+        static const int sizes[] = { 4, 8, 12, 16, 24, 32 };
+        int idx = gridXBox.getSelectedId() - 1;
+        if (idx >= 0 && idx < 6) waveformEditor.setGridX (sizes[idx]);
+    };
+    gridYBox.onChange = [this]() {
+        static const int sizes[] = { 2, 4, 6, 8, 12, 16 };
+        int idx = gridYBox.getSelectedId() - 1;
+        if (idx >= 0 && idx < 6) waveformEditor.setGridY (sizes[idx]);
+    };
+    addAndMakeVisible (gridXBox);
+    addAndMakeVisible (gridYBox);
 
     addTargetButton.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.3f));
     addTargetButton.setColour (juce::TextButton::textColourOffId, Colors::text);
@@ -152,7 +182,42 @@ void LfoPanel::paint (juce::Graphics& g)
 
     auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
 
+    int wfRight = getWidth() / 2 - 10;
+    int toolY = 46;
+    int wfBottom = toolY + 16 + 94;
+    int gridRowY = wfBottom + 2;
+
+    // --- Section boxes ---
+    // Controls row (SYNC, RETRIG, etc.)
+    g.setColour (Colors::border.withAlpha (0.25f));
+    g.drawRoundedRectangle (6.0f, 24.0f, (float) wfRight - 2.0f, 20.0f, 3.0f, 1.0f);
+
+    // Tool bar box
+    g.drawRoundedRectangle (6.0f, (float) toolY - 2.0f, (float) wfRight - 2.0f, 16.0f, 3.0f, 1.0f);
+
+    // Waveform box (drawn by the editor itself, add subtle outer glow)
+    g.setColour (Colors::border.withAlpha (0.15f));
+    g.drawRoundedRectangle (8.0f, (float) toolY + 14.0f, (float) wfRight - 12.0f, 98.0f, 2.0f, 1.0f);
+
+    // Grid controls labels
+    g.setColour (Colors::textDim.withAlpha (0.5f));
+    g.setFont (juce::Font (juce::FontOptions (8.0f)));
+    g.drawText ("X", wfRight - 114, gridRowY, 12, 16, juce::Justification::centredRight);
+    g.drawText ("Y", wfRight - 64, gridRowY, 12, 16, juce::Justification::centredRight);
+
+    // Knob section box
+    int ky = gridRowY + 20;
+    g.setColour (Colors::border.withAlpha (0.25f));
+    g.drawRoundedRectangle (6.0f, (float) ky - 4.0f, 244.0f, 66.0f, 3.0f, 1.0f);
+
+    // --- Targets section ---
     int targetsX = getWidth() / 2 + 10;
+
+    // Targets box
+    g.setColour (Colors::border.withAlpha (0.25f));
+    g.drawRoundedRectangle ((float) targetsX - 6.0f, 24.0f,
+        (float) (getWidth() - targetsX + 2), (float) (getHeight() - 28), 3.0f, 1.0f);
+
     g.setColour (Colors::textDim.withAlpha (0.6f));
     g.setFont (juce::Font (juce::FontOptions (8.5f)));
     g.drawText ("TARGETS", targetsX, 28, 80, 12, juce::Justification::centredLeft);
@@ -188,9 +253,16 @@ void LfoPanel::resized()
     toolPointer.setBounds (10, toolY, 30, 14);
     toolPencil.setBounds (43, toolY, 36, 14);
     toolEraser.setBounds (82, toolY, 42, 14);
+    toolLine.setBounds (127, toolY, 34, 14);
+    toolStairs.setBounds (164, toolY, 38, 14);
     waveformEditor.setBounds (10, toolY + 16, wfRight - 10, 94);
 
-    int ky = 160;
+    // Grid size controls below waveform
+    int gridY2 = toolY + 16 + 96;
+    gridXBox.setBounds (wfRight - 100, gridY2, 40, 16);
+    gridYBox.setBounds (wfRight - 50, gridY2, 40, 16);
+
+    int ky = gridY2 + 20;
     rateKnob.setBounds (10, ky, 56, 60);
     depthKnob.setBounds (70, ky, 56, 60);
     riseKnob.setBounds (130, ky, 56, 60);
@@ -221,8 +293,6 @@ void LfoPanel::syncControlsToLfo()
     shapeBox.setSelectedId ((int) lfo.shape + 1, juce::dontSendNotification);
 
     syncButton.setButtonText (lfo.tempoSync ? "SYNC" : "FREE");
-    syncButton.setColour (juce::TextButton::buttonColourId,
-        lfo.tempoSync ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
     syncDivBox.setVisible (lfo.tempoSync);
     syncDivBox.setSelectedId ((int) lfo.syncDiv + 1, juce::dontSendNotification);
 
@@ -243,15 +313,22 @@ void LfoPanel::syncControlsToLfo()
         rateKnob.setLabel ("Rate");
     }
 
-    retrigButton.setColour (juce::TextButton::buttonColourId,
-        lfo.retrigger ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
+    {
+        auto styleActive = [] (juce::TextButton& btn, bool active) {
+            auto bg = active ? Colors::lfoBlue.withAlpha (0.6f) : Colors::surfaceRaised;
+            auto fg = active ? juce::Colours::white : Colors::text;
+            btn.setColour (juce::TextButton::buttonColourId, bg);
+            btn.setColour (juce::TextButton::buttonOnColourId, bg);
+            btn.setColour (juce::TextButton::textColourOffId, fg);
+            btn.setColour (juce::TextButton::textColourOnId, fg);
+        };
+        styleActive (retrigButton, lfo.retrigger);
+        styleActive (envButton, lfo.envelopeMode);
+        styleActive (syncButton, lfo.tempoSync);
 
-    polarButton.setButtonText (lfo.unipolar ? "UNI" : "BI");
-    polarButton.setColour (juce::TextButton::buttonColourId,
-        lfo.unipolar ? Colors::surfaceRaised : Colors::lfoBlue.withAlpha (0.4f));
-
-    envButton.setColour (juce::TextButton::buttonColourId,
-        lfo.envelopeMode ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
+        polarButton.setButtonText (lfo.unipolar ? "UNI" : "BI");
+        styleActive (polarButton, ! lfo.unipolar);
+    }
 
     if (lfo.breakpoints.empty())
         lfo.breakpoints = LfoEngine::generateBreakpointsForShape (lfo.shape);
@@ -284,6 +361,13 @@ void LfoPanel::updatePhase()
     auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
     waveformEditor.setPhase (lfo.phase);
     waveformEditor.repaint();
+
+    // Keep knobs in sync when macros drive LFO params
+    if (! lfo.tempoSync)
+        rateKnob.setValue (lfo.rate, false);
+    depthKnob.setValue (lfo.depth, false);
+    riseKnob.setValue (lfo.riseTime, false);
+    smoothKnob.setValue (lfo.smooth, false);
 }
 
 void LfoPanel::setActiveLfo (int index)

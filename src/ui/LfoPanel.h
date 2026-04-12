@@ -36,7 +36,10 @@ private:
     juce::ComboBox syncDivBox;
 
     LfoWaveformEditor waveformEditor;
-    juce::TextButton toolPointer { "PTR" }, toolPencil { "STEP" }, toolEraser { "ERASE" };
+    juce::TextButton toolPointer { "PTR" }, toolPencil { "STEP" }, toolEraser { "ERASE" },
+                     toolLine { "LINE" }, toolStairs { "STAIR" };
+
+    juce::ComboBox gridXBox, gridYBox;
 
     juce::TextButton addTargetButton { "LINK" };
 

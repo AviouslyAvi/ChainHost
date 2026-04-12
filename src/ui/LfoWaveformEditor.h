@@ -22,13 +22,15 @@ public:
     void setEnabled (bool e) { lfoEnabled = e; }
     std::function<void()> onChanged;
 
-    enum Tool { PointerTool, PencilTool, EraserTool };
+    enum Tool { PointerTool, PencilTool, EraserTool, LineTool, StairsTool };
     Tool currentTool = PointerTool;
-    void setTool (Tool t) { currentTool = t; repaint(); }
+    void setTool (Tool t) { currentTool = t; lineStartSet = false; repaint(); }
     Tool getTool() const { return currentTool; }
 
-    static constexpr int gridX = 16;
-    static constexpr int gridY = 8;
+    int gridX = 16;
+    int gridY = 8;
+    void setGridX (int v) { gridX = v; repaint(); }
+    void setGridY (int v) { gridY = v; repaint(); }
     static constexpr int maxUndoSteps = 50;
 
 private:
@@ -49,6 +51,10 @@ private:
 
     // Drawing
     bool isDrawing = false;
+
+    // Line / Stairs tool
+    bool lineStartSet = false;
+    float lineStartX = 0.0f, lineStartY = 0.0f;
 
     // Undo
     std::vector<std::vector<LfoBreakpoint>> undoStack;

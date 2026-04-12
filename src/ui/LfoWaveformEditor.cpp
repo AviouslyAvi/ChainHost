@@ -195,6 +195,17 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
         g.fillEllipse (px - 3.5f, py - 3.5f, 7.0f, 7.0f);
     }
 
+    // Line/Stairs tool start indicator
+    if (lineStartSet && (currentTool == LineTool || currentTool == StairsTool))
+    {
+        float sx = b.getX() + lineStartX * w;
+        float sy = b.getY() + (1.0f - lineStartY) * h;
+        g.setColour (Colors::accent);
+        g.fillEllipse (sx - 5.0f, sy - 5.0f, 10.0f, 10.0f);
+        g.setColour (Colors::text);
+        g.drawEllipse (sx - 5.0f, sy - 5.0f, 10.0f, 10.0f, 1.0f);
+    }
+
     g.setColour (Colors::border.withAlpha (0.5f));
     g.drawRect (b, 1.0f);
 }
@@ -254,6 +265,78 @@ void LfoWaveformEditor::mouseDown (const juce::MouseEvent& e)
                 [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
             breakpoints->insert (it, newBp);
         }
+        if (onChanged) onChanged();
+        repaint();
+        return;
+    }
+
+    // Line / Stairs tool: click to set start, click again to draw
+    if (currentTool == LineTool || currentTool == StairsTool)
+    {
+        float nx = juce::jlimit (0.0f, 1.0f, (mx - b.getX()) / b.getWidth());
+        float ny = juce::jlimit (0.0f, 1.0f, 1.0f - (my - b.getY()) / b.getHeight());
+        nx = snapToGrid (nx, gridX, snapEnabled);
+        ny = snapToGrid (ny, gridY, snapEnabled);
+
+        if (! lineStartSet)
+        {
+            lineStartX = nx;
+            lineStartY = ny;
+            lineStartSet = true;
+            repaint();
+            return;
+        }
+
+        // Second click: draw line or stairs from start to here
+        pushUndo();
+        float x0 = std::min (lineStartX, nx);
+        float x1 = std::max (lineStartX, nx);
+        float y0 = (lineStartX <= nx) ? lineStartY : ny;
+        float y1 = (lineStartX <= nx) ? ny : lineStartY;
+
+        // Remove existing breakpoints in the range [x0, x1]
+        breakpoints->erase (
+            std::remove_if (breakpoints->begin(), breakpoints->end(),
+                [x0, x1] (const LfoBreakpoint& bp) { return bp.x >= x0 && bp.x <= x1; }),
+            breakpoints->end());
+
+        int numSteps = juce::jmax (2, (int) std::round ((x1 - x0) * (float) gridX) + 1);
+
+        if (currentTool == LineTool)
+        {
+            // Insert evenly spaced points along the line
+            for (int s = 0; s < numSteps; ++s)
+            {
+                float t = (numSteps == 1) ? 0.0f : (float) s / (float) (numSteps - 1);
+                float px = x0 + t * (x1 - x0);
+                float py = y0 + t * (y1 - y0);
+                px = snapToGrid (px, gridX, snapEnabled);
+                py = snapToGrid (py, gridY, snapEnabled);
+                LfoBreakpoint bp { px, py, 0.0f };
+                auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), bp,
+                    [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
+                breakpoints->insert (it, bp);
+            }
+        }
+        else // StairsTool
+        {
+            // Insert horizontal steps
+            for (int s = 0; s < numSteps; ++s)
+            {
+                float t = (numSteps == 1) ? 0.0f : (float) s / (float) (numSteps - 1);
+                float px = x0 + t * (x1 - x0);
+                // Step: y stays at the level of the previous step (quantised)
+                float py = y0 + std::floor (t * (float) gridY) / (float) gridY * (y1 - y0);
+                px = snapToGrid (px, gridX, snapEnabled);
+                py = snapToGrid (py, gridY, snapEnabled);
+                LfoBreakpoint bp { px, py, 0.0f };
+                auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), bp,
+                    [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
+                breakpoints->insert (it, bp);
+            }
+        }
+
+        lineStartSet = false;
         if (onChanged) onChanged();
         repaint();
         return;
