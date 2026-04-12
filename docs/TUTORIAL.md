@@ -4,6 +4,35 @@ Welcome to ChainHost — a VST3 plugin host with Serum-style LFO modulation, mac
 
 ---
 
+## Installation (macOS)
+
+### Standalone App
+1. Open the DMG and drag **ChainHost.app** into the **Applications** folder.
+
+### VST3 Plugin
+1. Copy **ChainHost.vst3** from the DMG to `/Library/Audio/Plug-Ins/VST3/`.
+   - In Finder: **Go > Go to Folder** and paste `/Library/Audio/Plug-Ins/VST3/`
+   - Or in Terminal: `cp -R /Volumes/ChainHost*/ChainHost.vst3 /Library/Audio/Plug-Ins/VST3/`
+
+### macOS Gatekeeper Warning
+Since ChainHost is not yet notarized with Apple, macOS may show a warning on first launch.
+
+**Option A — System Settings (recommended):**
+1. Try to open ChainHost (it will be blocked).
+2. Go to **System Settings > Privacy & Security**.
+3. Scroll down to the Security section — you'll see *"ChainHost" was blocked to protect your Mac*.
+4. Click **Open Anyway**.
+
+**Option B — Terminal:**
+```bash
+sudo xattr -cr /Applications/ChainHost.app
+sudo xattr -cr /Library/Audio/Plug-Ins/VST3/ChainHost.vst3
+```
+
+After either option, ChainHost will open normally from then on.
+
+---
+
 ## 1. The Chain Section (Top Area)
 
 The chain area is where you load and route your plugins.
