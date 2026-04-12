@@ -1,9 +1,5 @@
 #include "PluginWindow.h"
 
-#if JUCE_MAC
-extern "C" void attachChildWindowToParent (void* childHandle, void* parentHandle);
-#endif
-
 PluginWindow::PluginWindow (const juce::String& name, juce::AudioProcessorGraph::NodeID nid,
                             juce::AudioProcessorEditor* editor,
                             juce::Component* parentComp,
@@ -11,27 +7,22 @@ PluginWindow::PluginWindow (const juce::String& name, juce::AudioProcessorGraph:
     : DocumentWindow (name, Colors::surface, DocumentWindow::closeButton),
       nodeId (nid), closeCallback (std::move (onClose))
 {
+    juce::ignoreUnused (parentComp);
     setContentOwned (editor, true);
     setResizable (false, false);
     setDropShadowEnabled (true);
+    setAlwaysOnTop (true);
     centreWithSize (editor->getWidth(), editor->getHeight());
+    addToDesktop (juce::ComponentPeer::windowIsTemporary
+                | juce::ComponentPeer::windowHasTitleBar
+                | juce::ComponentPeer::windowHasCloseButton);
     setVisible (true);
     toFront (true);
-
-#if JUCE_MAC
-    if (parentComp != nullptr)
-        if (auto* peer = getPeer())
-            if (auto* parentPeer = parentComp->getPeer())
-                attachChildWindowToParent (peer->getNativeHandle(), parentPeer->getNativeHandle());
-#else
-    juce::ignoreUnused (parentComp);
-    setAlwaysOnTop (true);
-#endif
 }
 
 void PluginWindow::closeButtonPressed()
 {
+    if (closeCallback) closeCallback (nodeId);
     clearContentComponent();
     setVisible (false);
-    if (closeCallback) closeCallback (nodeId);
 }

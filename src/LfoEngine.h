@@ -80,8 +80,7 @@ public:
         float smooth = 0.0f;       // 0–1 smoothing amount
         float smoothedOutput = 0.5f;
 
-        // ── Custom waveform (breakpoints) ────────────────────────
-        bool useCustomShape = false;
+        // ── Waveform breakpoints (always used) ───────────────────
         std::vector<LfoBreakpoint> breakpoints;
 
         // ── Targets ──────────────────────────────────────────────
@@ -106,6 +105,7 @@ public:
     static float waveformAt (Shape shape, float phase, float lastRandom, float prevRandom = 0.5f);
     static float customWaveformAt (const std::vector<LfoBreakpoint>& bp, float phase);
     static float applyCurve (float t, float curve);
+    static std::vector<LfoBreakpoint> generateBreakpointsForShape (Shape shape);
 
     // Targets
     void addTarget (int lfoIndex, const LfoTarget& t);

@@ -31,7 +31,7 @@ void MappingPanel::paint (juce::Graphics& g)
     if (isLearning()) {
         g.setColour (Colors::learn.withAlpha (0.8f));
         g.setFont (juce::Font (juce::FontOptions (10.0f)));
-        g.drawText ("Move a parameter on any loaded plugin...", 10, 50, getWidth() - 20, 16, juce::Justification::centredLeft);
+        g.drawText ("Move a parameter on any plugin or LFO knob...", 10, 50, getWidth() - 20, 16, juce::Justification::centredLeft);
     } else if (mappingRows.isEmpty()) {
         g.setColour (Colors::textDim.withAlpha (0.4f));
         g.setFont (juce::Font (juce::FontOptions (10.0f)));
@@ -72,11 +72,16 @@ void MappingPanel::refresh()
         auto* row = mappingRows.add (new MappingRow());
         row->slotUid = m.slotUid; row->paramIndex = m.paramIndex;
         juce::String pName = "?", plugName = "?";
-        auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
-        if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
-            plugName = node->getProcessor()->getName();
-            auto& params = node->getProcessor()->getParameters();
-            if (m.paramIndex < params.size()) pName = params[m.paramIndex]->getName (28);
+        if (m.slotUid == InternalParams::uid) {
+            plugName = "ChainHost";
+            pName = InternalParams::paramName (m.paramIndex);
+        } else {
+            auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+            if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
+                plugName = node->getProcessor()->getName();
+                auto& params = node->getProcessor()->getParameters();
+                if (m.paramIndex < params.size()) pName = params[m.paramIndex]->getName (28);
+            }
         }
         row->label.setText (plugName + "  >  " + pName, juce::dontSendNotification);
         row->label.setColour (juce::Label::textColourId, Colors::text);
@@ -127,25 +132,46 @@ void MappingPanel::takeParamSnapshot() {
                 for (int pi = 0; pi < params.size(); ++pi)
                     learnSnapshot.push_back ({ slot.nodeId, pi, params[pi]->getValue() });
             }
+    // Internal ChainHost parameters (LFO knobs)
+    for (int ip = 0; ip < InternalParams::NumParams; ++ip)
+        learnSnapshot.push_back ({ {}, -(ip + 1),
+            InternalParams::getParamValue (ip, proc.getLfoEngine()) });
 }
 
 void MappingPanel::checkLearn() {
     if (learningMacroIndex < 0) return;
     float bestDelta = 0; juce::AudioProcessorGraph::NodeID bestNode {}; int bestParam = -1;
+    bool bestIsInternal = false; int bestInternalIdx = -1;
     for (auto& snap : learnSnapshot)
-        if (auto* node = proc.getGraph().getNodeForId (snap.nodeId)) {
+    {
+        if (snap.paramIndex < 0) {
+            // Internal param: paramIndex is -(ip+1)
+            int ip = -(snap.paramIndex + 1);
+            float cur = InternalParams::getParamValue (ip, proc.getLfoEngine());
+            float d = std::abs (cur - snap.value);
+            if (d > bestDelta) { bestDelta = d; bestIsInternal = true; bestInternalIdx = ip; }
+        }
+        else if (auto* node = proc.getGraph().getNodeForId (snap.nodeId)) {
             auto& params = node->getProcessor()->getParameters();
             if (snap.paramIndex < params.size()) {
                 float d = std::abs (params[snap.paramIndex]->getValue() - snap.value);
-                if (d > bestDelta) { bestDelta = d; bestNode = snap.nodeId; bestParam = snap.paramIndex; }
+                if (d > bestDelta) { bestDelta = d; bestNode = snap.nodeId; bestParam = snap.paramIndex; bestIsInternal = false; }
             }
         }
-    if (bestDelta > 0.05f && bestParam >= 0) {
-        auto uid = proc.getChainGraph().getUidForNodeId (bestNode);
-        if (uid.isNotEmpty()) {
-            proc.getMacroManager().addMapping (learningMacroIndex, uid, bestParam, 0.0f, 1.0f);
+    }
+    if (bestDelta > 0.05f) {
+        if (bestIsInternal && bestInternalIdx >= 0) {
+            proc.getMacroManager().addMapping (learningMacroIndex, InternalParams::uid, bestInternalIdx, 0.0f, 1.0f);
             setSelectedMacro (learningMacroIndex); stopLearn(); refresh();
             if (onMappingChanged) onMappingChanged();
+        }
+        else if (bestParam >= 0) {
+            auto uid = proc.getChainGraph().getUidForNodeId (bestNode);
+            if (uid.isNotEmpty()) {
+                proc.getMacroManager().addMapping (learningMacroIndex, uid, bestParam, 0.0f, 1.0f);
+                setSelectedMacro (learningMacroIndex); stopLearn(); refresh();
+                if (onMappingChanged) onMappingChanged();
+            }
         }
     }
 }
@@ -155,6 +181,18 @@ void MappingPanel::showParameterPicker() {
     int itemId = 1;
     struct PI { juce::String uid; int p; };
     std::vector<PI> lookup;
+
+    // Internal ChainHost params (LFO knobs)
+    {
+        juce::PopupMenu intSub;
+        for (int ip = 0; ip < InternalParams::NumParams; ++ip)
+        {
+            lookup.push_back ({ InternalParams::uid, ip });
+            intSub.addItem (itemId++, InternalParams::paramName (ip));
+        }
+        menu.addSubMenu ("ChainHost", intSub);
+    }
+
     for (int ci = 0; ci < cg.getNumChains(); ++ci)
         for (auto& slot : cg.getChain (ci).slots)
             if (auto* node = proc.getGraph().getNodeForId (slot.nodeId)) {
@@ -166,7 +204,6 @@ void MappingPanel::showParameterPicker() {
                 if (cg.getNumChains() > 1) lbl = "Chain " + juce::String (ci + 1) + " > " + lbl;
                 menu.addSubMenu (lbl, sub);
             }
-    if (itemId == 1) menu.addItem (-1, "(No plugins)", false, false);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (mapButton),
         [this, lookup] (int r) { if (r > 0 && r <= (int)lookup.size()) {
             proc.getMacroManager().addMapping (selectedMacro, lookup[(size_t)(r-1)].uid, lookup[(size_t)(r-1)].p, 0.0f, 1.0f);

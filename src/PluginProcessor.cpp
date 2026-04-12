@@ -110,12 +110,12 @@ void ChainHostProcessor::setStateInformation (const void* data, int sizeInBytes)
 void ChainHostProcessor::parameterValueChanged (int parameterIndex, float newValue)
 {
     if (parameterIndex >= 0 && parameterIndex < MacroManager::numMacros)
-        macroManager.setMacroValue (parameterIndex, newValue, graph, chainGraph);
+        macroManager.setMacroValue (parameterIndex, newValue, graph, chainGraph, &lfoEngine);
 }
 
 juce::File ChainHostProcessor::getPresetsDirectory()
 {
-    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+    auto dir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
                    .getChildFile ("ChainHost")
                    .getChildFile ("Presets");
     dir.createDirectory();

@@ -50,6 +50,14 @@ void FabKnob::paint (juce::Graphics& g)
         g.setFont (juce::Font (juce::FontOptions (8.5f)));
         g.drawText (label, 0, getHeight() - 12, getWidth(), 12, juce::Justification::centred);
     }
+
+    if (macroDragHover)
+    {
+        g.setColour (Colors::accent.withAlpha (0.2f));
+        g.fillRoundedRectangle (getLocalBounds().toFloat(), 4.0f);
+        g.setColour (Colors::accent.withAlpha (0.7f));
+        g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (1), 4.0f, 1.5f);
+    }
 }
 
 void FabKnob::setValue (float v, bool notify)
@@ -69,4 +77,20 @@ void FabKnob::setArcColour (juce::Colour c)
     arcColour = c;
     slider.setColour (juce::Slider::rotarySliderFillColourId, c);
     repaint();
+}
+
+bool FabKnob::isInterestedInDragSource (const SourceDetails& details)
+{
+    return details.description.toString().startsWith ("macro:");
+}
+
+void FabKnob::itemDropped (const SourceDetails& details)
+{
+    macroDragHover = false; repaint();
+    auto desc = details.description.toString();
+    if (desc.startsWith ("macro:") && onMacroDropped)
+    {
+        int macroIdx = desc.fromFirstOccurrenceOf ("macro:", false, false).getIntValue();
+        onMacroDropped (macroIdx);
+    }
 }

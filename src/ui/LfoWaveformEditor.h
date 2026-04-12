@@ -1,10 +1,12 @@
 #pragma once
-// LfoWaveformEditor — interactive breakpoint waveform editor with curved segments
+// LfoWaveformEditor — interactive breakpoint waveform editor with curved segments, grid snap,
+//                      multi-select (Cmd/Ctrl+drag), and undo (Cmd+Z)
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Colors.h"
 #include "../LfoEngine.h"
 
-class LfoWaveformEditor : public juce::Component
+class LfoWaveformEditor : public juce::Component,
+                          public juce::KeyListener
 {
 public:
     LfoWaveformEditor();
@@ -12,20 +14,47 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    using juce::Component::keyPressed;
+    bool keyPressed (const juce::KeyPress& key, juce::Component* origin) override;
 
     void setBreakpoints (std::vector<LfoBreakpoint>* bp) { breakpoints = bp; repaint(); }
     void setPhase (float p) { currentPhase = p; }
     void setEnabled (bool e) { lfoEnabled = e; }
-    void setPresetShape (LfoEngine::Shape s) { presetShape = s; repaint(); }
     std::function<void()> onChanged;
+
+    enum Tool { PointerTool, PencilTool, EraserTool };
+    Tool currentTool = PointerTool;
+    void setTool (Tool t) { currentTool = t; repaint(); }
+    Tool getTool() const { return currentTool; }
+
+    static constexpr int gridX = 16;
+    static constexpr int gridY = 8;
+    static constexpr int maxUndoSteps = 50;
 
 private:
     std::vector<LfoBreakpoint>* breakpoints = nullptr;
     int dragIndex = -1;
+    bool draggingCurve = false;
+    int curveSegIndex = -1;
     float currentPhase = 0.0f;
     bool lfoEnabled = false;
-    LfoEngine::Shape presetShape = LfoEngine::Sine;
 
+    // Multi-select
+    std::set<int> selectedIndices;
+    bool draggingSelection = false;    // Cmd/Ctrl rubber-band select
+    juce::Point<float> selectStart;
+    juce::Rectangle<float> selectRect;
+    bool movingSelected = false;       // dragging selected group
+    float moveDragStartX = 0.0f, moveDragStartY = 0.0f;
+
+    // Drawing
+    bool isDrawing = false;
+
+    // Undo
+    std::vector<std::vector<LfoBreakpoint>> undoStack;
+    void pushUndo();
+
+    float snapToGrid (float val, int divisions, bool snap) const;
     int hitTestBreakpoint (float mx, float my, float w, float h) const;
     juce::Point<float> bpToScreen (const LfoBreakpoint& bp, float w, float h) const;
 };

@@ -22,33 +22,38 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addAndMakeVisible (enableButton);
 
     for (int s = 0; s < LfoEngine::NumShapes; ++s)
-    {
-        shapeButtons[s].setButtonText (LfoEngine::shapeName ((LfoEngine::Shape) s));
-        shapeButtons[s].setColour (juce::TextButton::textColourOffId, Colors::text);
-        shapeButtons[s].onClick = [this, s]() {
+        shapeBox.addItem (LfoEngine::shapeName ((LfoEngine::Shape) s), s + 1);
+    shapeBox.setColour (juce::ComboBox::backgroundColourId, Colors::surfaceRaised);
+    shapeBox.setColour (juce::ComboBox::textColourId, Colors::text);
+    shapeBox.setColour (juce::ComboBox::outlineColourId, Colors::border);
+    shapeBox.onChange = [this]() {
+        int s = shapeBox.getSelectedId() - 1;
+        if (s >= 0)
+        {
             auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
             lfo.shape = (LfoEngine::Shape) s;
-            lfo.useCustomShape = false;
+            lfo.breakpoints = LfoEngine::generateBreakpointsForShape ((LfoEngine::Shape) s);
             syncControlsToLfo();
-        };
-        addAndMakeVisible (shapeButtons[s]);
-    }
-
-    customShapeButton.setColour (juce::TextButton::textColourOffId, Colors::text);
-    customShapeButton.onClick = [this]() {
-        auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
-        lfo.useCustomShape = ! lfo.useCustomShape;
-        if (lfo.useCustomShape && lfo.breakpoints.empty())
-            lfo.breakpoints = LfoEngine::defaultBreakpoints();
-        syncControlsToLfo();
+        }
     };
-    addAndMakeVisible (customShapeButton);
+    addAndMakeVisible (shapeBox);
 
     rateKnob.setRange (LfoEngine::kMinRate, LfoEngine::kMaxRate);
     rateKnob.setDefaultValue (1.0f);
     rateKnob.setSuffix (" Hz");
     rateKnob.setShowPercentage (true);
-    rateKnob.onValueChange = [this]() { proc.getLfoEngine().getLfo (activeLfo).rate = rateKnob.getValue(); };
+    rateKnob.onValueChange = [this]() {
+        auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
+        if (lfo.tempoSync)
+        {
+            int div = juce::jlimit (0, (int) NumSyncDivs - 1, juce::roundToInt (rateKnob.getValue()));
+            lfo.syncDiv = (SyncDiv) div;
+            rateKnob.setSuffix ("");
+            // Update displayed text to show division name
+        }
+        else
+            lfo.rate = rateKnob.getValue();
+    };
     addAndMakeVisible (rateKnob);
 
     depthKnob.setDefaultValue (0.5f);
@@ -116,6 +121,23 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     waveformEditor.onChanged = [this]() { repaint(); };
     addAndMakeVisible (waveformEditor);
 
+    auto styleToolBtn = [this] (juce::TextButton& btn, LfoWaveformEditor::Tool tool) {
+        btn.setColour (juce::TextButton::textColourOffId, Colors::text);
+        btn.setColour (juce::TextButton::textColourOnId, Colors::text);
+        btn.onClick = [this, tool, &btn]() {
+            waveformEditor.setTool (tool);
+            toolPointer.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolPencil.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolEraser.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            btn.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
+        };
+        addAndMakeVisible (btn);
+    };
+    styleToolBtn (toolPointer, LfoWaveformEditor::PointerTool);
+    styleToolBtn (toolPencil, LfoWaveformEditor::PencilTool);
+    styleToolBtn (toolEraser, LfoWaveformEditor::EraserTool);
+    toolPointer.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
+
     addTargetButton.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.3f));
     addTargetButton.setColour (juce::TextButton::textColourOffId, Colors::text);
     addTargetButton.onClick = [this]() { showTargetMenu (activeLfo); };
@@ -152,14 +174,7 @@ void LfoPanel::resized()
     int ctrlX = 10 + LfoEngine::numLfos * (tabW + 3) + 6;
     enableButton.setBounds (ctrlX, 4, 32, 18);
 
-    int sx = ctrlX + 38;
-    for (int s = 0; s < LfoEngine::NumShapes; ++s)
-    {
-        shapeButtons[s].setBounds (sx, 4, 30, 18);
-        sx += 33;
-    }
-    customShapeButton.setBounds (sx, 4, 40, 18);
-
+    shapeBox.setBounds (ctrlX + 38, 4, 110, 18);
     int my = 26;
     syncButton.setBounds (10, my, 38, 16);
     syncDivBox.setBounds (52, my, 68, 16);
@@ -168,9 +183,14 @@ void LfoPanel::resized()
     envButton.setBounds (202, my, 32, 16);
 
     int wfRight = getWidth() / 2 - 10;
-    waveformEditor.setBounds (10, 46, wfRight - 10, 64);
+    // Tool buttons above waveform
+    int toolY = 46;
+    toolPointer.setBounds (10, toolY, 30, 14);
+    toolPencil.setBounds (43, toolY, 36, 14);
+    toolEraser.setBounds (82, toolY, 42, 14);
+    waveformEditor.setBounds (10, toolY + 16, wfRight - 10, 94);
 
-    int ky = 114;
+    int ky = 160;
     rateKnob.setBounds (10, ky, 56, 60);
     depthKnob.setBounds (70, ky, 56, 60);
     riseKnob.setBounds (130, ky, 56, 60);
@@ -198,12 +218,7 @@ void LfoPanel::syncControlsToLfo()
         lfo.enabled ? Colors::lfoBlue.withAlpha (0.5f) : Colors::surfaceRaised);
     enableButton.setColour (juce::TextButton::buttonOnColourId, Colors::lfoBlue.withAlpha (0.5f));
 
-    for (int s = 0; s < LfoEngine::NumShapes; ++s)
-        shapeButtons[s].setColour (juce::TextButton::buttonColourId,
-            (!lfo.useCustomShape && (int) lfo.shape == s) ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
-
-    customShapeButton.setColour (juce::TextButton::buttonColourId,
-        lfo.useCustomShape ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
+    shapeBox.setSelectedId ((int) lfo.shape + 1, juce::dontSendNotification);
 
     syncButton.setButtonText (lfo.tempoSync ? "SYNC" : "FREE");
     syncButton.setColour (juce::TextButton::buttonColourId,
@@ -211,7 +226,22 @@ void LfoPanel::syncControlsToLfo()
     syncDivBox.setVisible (lfo.tempoSync);
     syncDivBox.setSelectedId ((int) lfo.syncDiv + 1, juce::dontSendNotification);
 
-    rateKnob.setVisible (! lfo.tempoSync);
+    // Reconfigure rate knob for sync vs free mode
+    if (lfo.tempoSync)
+    {
+        rateKnob.setRange (0.0f, (float) (NumSyncDivs - 1));
+        rateKnob.getSlider().setNumDecimalPlacesToDisplay (0);
+        rateKnob.setValue ((float) lfo.syncDiv, false);
+        rateKnob.setSuffix ("");
+        rateKnob.setLabel (syncDivName (lfo.syncDiv));
+    }
+    else
+    {
+        rateKnob.setRange (LfoEngine::kMinRate, LfoEngine::kMaxRate);
+        rateKnob.getSlider().setNumDecimalPlacesToDisplay (2);
+        rateKnob.setSuffix (" Hz");
+        rateKnob.setLabel ("Rate");
+    }
 
     retrigButton.setColour (juce::TextButton::buttonColourId,
         lfo.retrigger ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
@@ -223,16 +253,14 @@ void LfoPanel::syncControlsToLfo()
     envButton.setColour (juce::TextButton::buttonColourId,
         lfo.envelopeMode ? Colors::lfoBlue.withAlpha (0.4f) : Colors::surfaceRaised);
 
-    if (lfo.useCustomShape)
-        waveformEditor.setBreakpoints (&lfo.breakpoints);
-    else
-        waveformEditor.setBreakpoints (nullptr);
-
-    waveformEditor.setPresetShape (lfo.shape);
+    if (lfo.breakpoints.empty())
+        lfo.breakpoints = LfoEngine::generateBreakpointsForShape (lfo.shape);
+    waveformEditor.setBreakpoints (&lfo.breakpoints);
     waveformEditor.setEnabled (lfo.enabled);
     waveformEditor.setPhase (lfo.phase);
 
-    rateKnob.setValue (lfo.rate, false);
+    if (! lfo.tempoSync)
+        rateKnob.setValue (lfo.rate, false);
     depthKnob.setValue (lfo.depth, false);
     riseKnob.setValue (lfo.riseTime, false);
     smoothKnob.setValue (lfo.smooth, false);
@@ -346,4 +374,20 @@ void LfoPanel::showTargetMenu (int lfoIndex)
                 refresh();
             }
         });
+}
+
+void LfoPanel::setupMacroDropHandlers()
+{
+    // Map LFO knobs to InternalParams indices for macro drag-drop
+    // Each LFO has 4 params: Rate(0), Depth(1), Rise(2), Smooth(3)
+    auto makeHandler = [this] (int paramOffset) {
+        return [this, paramOffset] (int macroIdx) {
+            int internalIdx = activeLfo * 4 + paramOffset;
+            proc.getMacroManager().addMapping (macroIdx, InternalParams::uid, internalIdx, 0.0f, 1.0f);
+        };
+    };
+    rateKnob.onMacroDropped   = makeHandler (0);
+    depthKnob.onMacroDropped  = makeHandler (1);
+    riseKnob.onMacroDropped   = makeHandler (2);
+    smoothKnob.onMacroDropped = makeHandler (3);
 }

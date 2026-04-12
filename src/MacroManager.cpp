@@ -1,5 +1,46 @@
 #include "MacroManager.h"
 #include "ChainGraph.h"
+#include "LfoEngine.h"
+
+//==============================================================================
+// InternalParams helpers
+//==============================================================================
+
+juce::String InternalParams::paramName (int paramIdx)
+{
+    if (paramIdx < 0 || paramIdx >= NumParams) return "?";
+    int li = lfoIndex (paramIdx);
+    int lp = lfoParam (paramIdx);
+    static const char* names[] = { "Rate", "Depth", "Rise", "Smooth" };
+    return "LFO " + juce::String (li + 1) + " " + names[lp];
+}
+
+float InternalParams::getParamValue (int paramIdx, const LfoEngine& lfo)
+{
+    if (paramIdx < 0 || paramIdx >= NumParams) return 0.0f;
+    auto& l = lfo.getLfo (lfoIndex (paramIdx));
+    switch (lfoParam (paramIdx))
+    {
+        case 0: return juce::jmap (l.rate, LfoEngine::kMinRate, LfoEngine::kMaxRate, 0.0f, 1.0f);
+        case 1: return l.depth;
+        case 2: return l.riseTime;
+        case 3: return l.smooth;
+        default: return 0.0f;
+    }
+}
+
+void InternalParams::setParamValue (int paramIdx, float normValue, LfoEngine& lfo)
+{
+    if (paramIdx < 0 || paramIdx >= NumParams) return;
+    auto& l = lfo.getLfo (lfoIndex (paramIdx));
+    switch (lfoParam (paramIdx))
+    {
+        case 0: l.rate = juce::jmap (normValue, LfoEngine::kMinRate, LfoEngine::kMaxRate); break;
+        case 1: l.depth = normValue; break;
+        case 2: l.riseTime = normValue; break;
+        case 3: l.smooth = normValue; break;
+    }
+}
 
 void MacroManager::addMapping (int macroIndex, const juce::String& slotUid,
                                int paramIndex, float minVal, float maxVal)
@@ -52,7 +93,8 @@ void MacroManager::removeMappingsForUid (const juce::String& slotUid)
 
 void MacroManager::setMacroValue (int macroIndex, float normalisedValue,
                                   juce::AudioProcessorGraph& graph,
-                                  const ChainGraph& chainGraph)
+                                  const ChainGraph& chainGraph,
+                                  LfoEngine* lfoEngine)
 {
     if (macroIndex < 0 || macroIndex >= numMacros)
         return;
@@ -62,6 +104,14 @@ void MacroManager::setMacroValue (int macroIndex, float normalisedValue,
 
     for (auto& m : mappings[macroIndex])
     {
+        float scaled = m.minValue + normalisedValue * (m.maxValue - m.minValue);
+
+        if (m.slotUid == InternalParams::uid && lfoEngine != nullptr)
+        {
+            InternalParams::setParamValue (m.paramIndex, scaled, *lfoEngine);
+            continue;
+        }
+
         auto nodeId = chainGraph.getNodeIdForUid (m.slotUid);
         if (auto* node = graph.getNodeForId (nodeId))
         {
@@ -69,10 +119,7 @@ void MacroManager::setMacroValue (int macroIndex, float normalisedValue,
             {
                 auto& params = proc->getParameters();
                 if (m.paramIndex >= 0 && m.paramIndex < params.size())
-                {
-                    float scaled = m.minValue + normalisedValue * (m.maxValue - m.minValue);
                     params[m.paramIndex]->setValue (scaled);
-                }
             }
         }
     }
@@ -90,6 +137,19 @@ const std::vector<MacroMapping>& MacroManager::getMappings (int macroIndex) cons
     return mappings[macroIndex];
 }
 
+void MacroManager::setMacroName (int macroIndex, const juce::String& name)
+{
+    if (macroIndex >= 0 && macroIndex < numMacros)
+        macroNames[macroIndex] = name;
+}
+
+juce::String MacroManager::getMacroName (int macroIndex) const
+{
+    if (macroIndex >= 0 && macroIndex < numMacros)
+        return macroNames[macroIndex];
+    return {};
+}
+
 std::unique_ptr<juce::XmlElement> MacroManager::toXml() const
 {
     auto xml = std::make_unique<juce::XmlElement> ("MacroMappings");
@@ -97,6 +157,13 @@ std::unique_ptr<juce::XmlElement> MacroManager::toXml() const
     const juce::ScopedLock sl (lock);
     for (int i = 0; i < numMacros; ++i)
     {
+        if (macroNames[i].isNotEmpty())
+        {
+            auto* n = xml->createNewChildElement ("MacroName");
+            n->setAttribute ("macro", i);
+            n->setAttribute ("name", macroNames[i]);
+        }
+
         for (auto& m : mappings[i])
         {
             auto* e = xml->createNewChildElement ("Mapping");
@@ -115,7 +182,17 @@ void MacroManager::fromXml (const juce::XmlElement& xml)
 {
     const juce::ScopedLock sl (lock);
     for (int i = 0; i < numMacros; ++i)
+    {
         mappings[i].clear();
+        macroNames[i] = {};
+    }
+
+    for (auto* n : xml.getChildWithTagNameIterator ("MacroName"))
+    {
+        int idx = n->getIntAttribute ("macro", -1);
+        if (idx >= 0 && idx < numMacros)
+            macroNames[idx] = n->getStringAttribute ("name");
+    }
 
     for (auto* e : xml.getChildWithTagNameIterator ("Mapping"))
     {

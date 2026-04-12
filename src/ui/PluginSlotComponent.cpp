@@ -73,6 +73,7 @@ void PluginSlotComponent::paint (juce::Graphics& g)
         g.drawRect (bounds, 2.0f);
     }
 
+    // Subtle dots as placeholder
     g.setColour (Colors::textDim.withAlpha (0.2f));
     for (int dy = 0; dy < 3; ++dy)
         for (int dx = 0; dx < 2; ++dx)
@@ -83,9 +84,9 @@ void PluginSlotComponent::resized()
 {
     auto b = getLocalBounds().reduced (4);
     bypassButton.setBounds (b.getX() + 6, b.getY() + 4, 28, 16);
-    nameLabel.setBounds (b.getX() + 38, b.getY() + 4, b.getWidth() - 60, 18);
-    removeButton.setBounds (b.getRight() - 22, b.getY() + 3, 20, 18);
-    dryWetKnob.setBounds (b.getRight() - 56, b.getY() + 22, 50, 54);
+    nameLabel.setBounds (b.getX() + 38, b.getY() + 4, b.getWidth() - 56, 18);
+    removeButton.setBounds (b.getRight() - 18, b.getY() + 3, 16, 18);
+    dryWetKnob.setBounds (b.getRight() - 48, b.getY() + 22, 44, 54);
 }
 
 void PluginSlotComponent::mouseDown (const juce::MouseEvent& e)

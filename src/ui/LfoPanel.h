@@ -16,6 +16,7 @@ public:
     void resized() override;
     void refresh();
     void updatePhase();
+    void setupMacroDropHandlers();
 private:
     ChainHostProcessor& proc;
     int activeLfo = 0;
@@ -23,8 +24,7 @@ private:
     juce::TextButton lfoTabs[LfoEngine::numLfos];
 
     juce::TextButton enableButton { "OFF" };
-    juce::TextButton shapeButtons[LfoEngine::NumShapes];
-    juce::TextButton customShapeButton { "DRAW" };
+    juce::ComboBox shapeBox;
     FabKnob rateKnob { "Rate", Colors::lfoBlue }, depthKnob { "Depth", Colors::lfoBlue };
     FabKnob riseKnob { "Rise", Colors::lfoBlue }, smoothKnob { "Smooth", Colors::lfoBlue };
 
@@ -36,8 +36,9 @@ private:
     juce::ComboBox syncDivBox;
 
     LfoWaveformEditor waveformEditor;
+    juce::TextButton toolPointer { "PTR" }, toolPencil { "STEP" }, toolEraser { "ERASE" };
 
-    juce::TextButton addTargetButton { "+ TARGET" };
+    juce::TextButton addTargetButton { "LINK" };
 
     struct TargetRow {
         juce::Label label;

@@ -64,11 +64,40 @@ private:
 
     FabKnob macroKnobs[MacroManager::numMacros];
     juce::Label macroLabels[MacroManager::numMacros];
-    juce::TextButton learnButtons[MacroManager::numMacros];
 
-    juce::TextButton tabMappings { "MAPPINGS" }, tabLfo { "LFO" };
-    int activeTab = 0;
-    MappingPanel mappingPanel;
+    // Drag handle for each macro — shows ✥ icon, draggable onto target params
+    class MacroDragHandle : public juce::Component
+    {
+    public:
+        MacroDragHandle (int idx) : macroIndex (idx) {}
+        void paint (juce::Graphics& g) override;
+        void mouseDown (const juce::MouseEvent& e) override;
+        void mouseDrag (const juce::MouseEvent& e) override;
+        int macroIndex;
+        bool selected = false;
+    };
+    MacroDragHandle* macroDragHandles[MacroManager::numMacros];
+    juce::OwnedArray<MacroDragHandle> dragHandleStorage;
+    juce::TextButton macroLearnBtns[MacroManager::numMacros];
+
+    // Link button — draws a chain icon, opens plugin param picker
+    class MacroLinkButton : public juce::Component
+    {
+    public:
+        MacroLinkButton() {}
+        void paint (juce::Graphics& g) override;
+        std::function<void()> onClick;
+        void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+    };
+    MacroLinkButton macroLinkBtns[MacroManager::numMacros];
+
+    juce::String macroNames[MacroManager::numMacros]; // user-editable names
+    int selectedMacro = 0;
+    void selectMacro (int i);
+    void showMacroLinkMenu (int macroIdx);
+    void showMacroRenameEditor (int macroIdx);
+
+    MappingPanel mappingPanel;  // kept for learn/check backend — not shown in UI
     LfoPanel lfoPanel;
 
     juce::OwnedArray<PluginWindow> pluginWindows;
@@ -81,7 +110,6 @@ private:
     void openPluginWindow (juce::AudioProcessorGraph::NodeID nodeId);
     void closePluginWindow (juce::AudioProcessorGraph::NodeID nodeId);
     void cleanupClosedWindows();
-    void setActiveTab (int tab);
 
    #if DEBUG || JUCE_DEBUG
     melatonin::Inspector inspector { *this, false };

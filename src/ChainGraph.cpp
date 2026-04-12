@@ -259,11 +259,13 @@ void ChainGraph::rebuildConnections (juce::AudioProcessorGraph& graph)
             // Input -> Gain -> DryCapture -> Plugin -> DryWet -> [next DryCapture -> ...] -> Output
             connectNodes (graph, audioInputNodeId, chain.gainNodeId);
             connectNodes (graph, chain.gainNodeId, chain.slots.front().dryCaptureNodeId);
-            connectNodes (graph, midiInputNodeId, chain.slots.front().nodeId, true);
 
             for (size_t i = 0; i < chain.slots.size(); ++i)
             {
                 auto& slot = chain.slots[i];
+
+                // MIDI input -> every plugin (fan-out so all instruments receive notes)
+                connectNodes (graph, midiInputNodeId, slot.nodeId, true);
 
                 // dryCapture -> plugin -> dryWet
                 connectNodes (graph, slot.dryCaptureNodeId, slot.nodeId);
@@ -273,15 +275,15 @@ void ChainGraph::rebuildConnections (juce::AudioProcessorGraph& graph)
                 {
                     // dryWet -> next dryCapture
                     connectNodes (graph, slot.dryWetNodeId, chain.slots[i + 1].dryCaptureNodeId);
-                    connectNodes (graph, slot.nodeId, chain.slots[i + 1].nodeId, true);
                 }
                 else
                 {
                     // last dryWet -> output
                     connectNodes (graph, slot.dryWetNodeId, audioOutputNodeId);
-                    connectNodes (graph, slot.nodeId, midiOutputNodeId, true);
                 }
             }
+            // last plugin -> MIDI output
+            connectNodes (graph, chain.slots.back().nodeId, midiOutputNodeId, true);
         }
     }
 }

@@ -13,8 +13,6 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     styleBtn (addPluginButton, Colors::accent.withAlpha (0.45f));
     styleBtn (addChainButton, Colors::chainAccent.withAlpha (0.35f));
     styleBtn (presetsToggle, Colors::surfaceRaised);
-    styleBtn (tabMappings, Colors::accent.withAlpha (0.45f));
-    styleBtn (tabLfo, Colors::surfaceRaised);
 
     scanButton.onClick = [this]() {
         scanButton.setButtonText ("..."); scanButton.setEnabled (false);
@@ -30,10 +28,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
         if (presetBrowserOpen) presetBrowser.refresh();
         resized();
     };
-    tabMappings.onClick = [this]() { setActiveTab (0); };
-    tabLfo.onClick = [this]() { setActiveTab (1); };
-
-    for (auto* btn : { &scanButton, &addPluginButton, &addChainButton, &presetsToggle, &tabMappings, &tabLfo })
+    for (auto* btn : { &scanButton, &addPluginButton, &addChainButton, &presetsToggle })
         addAndMakeVisible (btn);
 
     presetBrowser.setVisible (false);
@@ -55,35 +50,56 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     {
         macroKnobs[i].setArcColour (macroColours[i]);
         macroKnobs[i].setDefaultValue (0.0f);
+        macroKnobs[i].setShowPercentage (false);
+        macroKnobs[i].setLabel ({});
         macroKnobs[i].onValueChange = [this, i]() { proc.getParameters()[i]->setValueNotifyingHost (macroKnobs[i].getValue()); };
         addAndMakeVisible (macroKnobs[i]);
 
-        macroLabels[i].setText ("MACRO " + juce::String (i + 1), juce::dontSendNotification);
+        macroNames[i] = proc.getMacroManager().getMacroName (i);
+        if (macroNames[i].isEmpty()) macroNames[i] = "Macro " + juce::String (i + 1);
+        macroLabels[i].setText (macroNames[i], juce::dontSendNotification);
         macroLabels[i].setJustificationType (juce::Justification::centred);
         macroLabels[i].setColour (juce::Label::textColourId, Colors::textDim);
-        macroLabels[i].setFont (juce::Font (juce::FontOptions (8.5f)));
-        macroLabels[i].setInterceptsMouseClicks (true, false);
+        macroLabels[i].setFont (juce::Font (juce::FontOptions (8.0f)));
+        macroLabels[i].setEditable (false, true, false);  // double-click to edit
+        macroLabels[i].onTextChange = [this, i]() {
+            macroNames[i] = macroLabels[i].getText();
+            proc.getMacroManager().setMacroName (i, macroNames[i]);
+        };
+        macroLabels[i].setInterceptsMouseClicks (true, true);
         macroLabels[i].addMouseListener (this, false);
         addAndMakeVisible (macroLabels[i]);
 
-        learnButtons[i].setButtonText ("LEARN");
-        learnButtons[i].setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
-        learnButtons[i].setColour (juce::TextButton::textColourOffId, Colors::textDim);
-        learnButtons[i].onClick = [this, i]() {
-            if (mappingPanel.isLearning() && mappingPanel.getLearningMacro() == i) mappingPanel.stopLearn();
-            else mappingPanel.startLearn (i);
+        auto* handle = dragHandleStorage.add (new MacroDragHandle (i));
+        macroDragHandles[i] = handle;
+        handle->addMouseListener (this, false);
+        addAndMakeVisible (handle);
+
+        macroLearnBtns[i].setButtonText ("LEARN");
+        macroLearnBtns[i].setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised.withAlpha (0.7f));
+        macroLearnBtns[i].setColour (juce::TextButton::textColourOffId, Colors::textDim);
+        macroLearnBtns[i].setTooltip ("Learn — move a parameter to map it");
+        macroLearnBtns[i].onClick = [this, i]() {
+            if (mappingPanel.isLearning() && mappingPanel.getLearningMacro() == i)
+                mappingPanel.stopLearn();
+            else
+                mappingPanel.startLearn (i);
             for (int j = 0; j < MacroManager::numMacros; ++j) {
                 bool learning = mappingPanel.isLearning() && mappingPanel.getLearningMacro() == j;
-                learnButtons[j].setColour (juce::TextButton::buttonColourId, learning ? Colors::learn.withAlpha (0.5f) : Colors::surfaceRaised);
-                learnButtons[j].setColour (juce::TextButton::textColourOffId, learning ? Colors::learn : Colors::textDim);
+                macroLearnBtns[j].setColour (juce::TextButton::buttonColourId, learning ? Colors::learn.withAlpha (0.5f) : Colors::surfaceRaised);
+                macroLearnBtns[j].setColour (juce::TextButton::textColourOffId, learning ? Colors::learn : Colors::textDim);
             }
         };
-        addAndMakeVisible (learnButtons[i]);
+        addAndMakeVisible (macroLearnBtns[i]);
+
+        macroLinkBtns[i].onClick = [this, i]() { selectMacro (i); showMacroLinkMenu (i); };
+        addAndMakeVisible (macroLinkBtns[i]);
     }
+    selectMacro (0);
 
     mappingPanel.onMappingChanged = [this]() { refreshMacroLabels(); };
-    addAndMakeVisible (mappingPanel);
-    lfoPanel.setVisible (false);
+    addChildComponent (mappingPanel);  // hidden — learn backend only
+    lfoPanel.setupMacroDropHandlers();
     addAndMakeVisible (lfoPanel);
 
     chainViewport.setViewedComponent (&chainContainer, false);
@@ -91,7 +107,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     addAndMakeVisible (chainViewport);
 
     refreshChainView(); refreshMacroLabels();
-    setSize (940, 740);
+    setSize (940, 820);
     startTimer (50);
 }
 
@@ -107,12 +123,15 @@ void ChainHostEditor::timerCallback()
     cleanupClosedWindows();
     mappingPanel.checkLearn();
     if (!mappingPanel.isLearning())
-        for (int i = 0; i < MacroManager::numMacros; ++i)
-            if (learnButtons[i].findColour (juce::TextButton::buttonColourId) != Colors::surfaceRaised) {
-                learnButtons[i].setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
-                learnButtons[i].setColour (juce::TextButton::textColourOffId, Colors::textDim);
-                refreshMacroLabels();
+    {
+        for (int j = 0; j < MacroManager::numMacros; ++j)
+            if (macroLearnBtns[j].findColour (juce::TextButton::buttonColourId) != Colors::surfaceRaised)
+            {
+                macroLearnBtns[j].setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+                macroLearnBtns[j].setColour (juce::TextButton::textColourOffId, Colors::textDim);
             }
+        refreshMacroLabels();
+    }
 
     // Auto-hide scrollbar logic
     auto& vsb = chainViewport.getVerticalScrollBar();
@@ -129,7 +148,7 @@ void ChainHostEditor::timerCallback()
     }
     vsb.setAlpha (scrollAlpha);
 
-    if (activeTab == 1) lfoPanel.updatePhase();
+    lfoPanel.updatePhase();
 }
 
 void ChainHostEditor::ChainContainer::paint (juce::Graphics& g)
@@ -160,7 +179,7 @@ void ChainHostEditor::ChainContainer::resized()
         int y = ci * 88;
         row->volumeKnob.setBounds (44, y + 4, 50, 68);
         int px = 100;
-        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 152, 84); px += 158; }
+        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 120, 84); px += 126; }
         row->addToChainButton.setBounds (px + 4, y + 28, 30, 30);
         row->removeChainButton.setBounds (getWidth() - 30, y + 32, 22, 22);
     }
@@ -184,15 +203,56 @@ void ChainHostEditor::paint (juce::Graphics& g)
         g.drawText ("v0.2", 138, 20, 30, 12, juce::Justification::centredLeft);
     }
 
-    int macroTop = getHeight() - 230;
-    int macroStripW = 160;
+    int macroTop = getHeight() - 390;
+    int macroStripW = 200;
+
+    // Macro strip background
+    g.setColour (Colors::bgDeep);
+    g.fillRect (0, macroTop, macroStripW, getHeight() - macroTop);
+
+    // "MACROS" title centered
+    g.setColour (Colors::textDim);
+    g.setFont (juce::Font (juce::FontOptions (11.0f).withStyle ("Bold")));
+    g.drawText ("MACROS", 0, macroTop + 4, macroStripW, 16, juce::Justification::centred);
+    // Underline
+    g.setColour (Colors::border.withAlpha (0.5f));
+    g.drawLine (8.0f, (float)(macroTop + 22), (float)(macroStripW - 8), (float)(macroTop + 22), 1.0f);
+
+    // Cell backgrounds and borders
+    int cellW = macroStripW / 2;
+    int cellH = (getHeight() - macroTop - 26) / 4;
+    int gridTop = macroTop + 26;
+    for (int row = 0; row < 4; ++row)
+        for (int col = 0; col < 2; ++col)
+        {
+            int idx = col * 4 + row;
+            int cx = col * cellW;
+            int cy = gridTop + row * cellH;
+            // Cell bg
+            g.setColour (idx == selectedMacro ? Colors::accent.withAlpha (0.12f) : Colors::surface.withAlpha (0.15f));
+            g.fillRect (cx, cy, cellW, cellH);
+            // Cell border
+            g.setColour (Colors::border.withAlpha (0.3f));
+            g.drawRect (cx, cy, cellW, cellH, 1);
+            // Macro number — top-left
+            g.setColour (idx == selectedMacro ? Colors::accent : Colors::textDim.withAlpha (0.6f));
+            g.setFont (juce::Font (juce::FontOptions (11.0f).withStyle ("Bold")));
+            g.drawText (juce::String (idx + 1), cx + 4, cy + 2, 14, 12, juce::Justification::centredLeft);
+
+            // Link count — bottom center
+            auto& mappings = proc.getMacroManager().getMappings (idx);
+            if (!mappings.empty()) {
+                g.setColour (Colors::accent.withAlpha (0.7f));
+                g.setFont (juce::Font (juce::FontOptions (8.0f)));
+                g.drawText (juce::String ((int)mappings.size()) + " link" + (mappings.size() > 1 ? "s" : ""),
+                            cx, cy + cellH - 14, cellW, 12, juce::Justification::centred);
+            }
+        }
+
+    // Top border
     g.setColour (Colors::border);
     g.drawLine (0, (float)macroTop, (float)getWidth(), (float)macroTop, 1.0f);
-    g.setColour (Colors::surface.withAlpha (0.6f));
-    g.fillRect (0, macroTop + 1, macroStripW, getHeight() - macroTop - 1);
-    g.setColour (Colors::textDim.withAlpha (0.5f));
-    g.setFont (juce::Font (juce::FontOptions (9.0f)));
-    g.drawText ("MACROS", 8, macroTop + 4, 60, 12, juce::Justification::centredLeft);
+    // Right border
     g.setColour (Colors::border.withAlpha (0.4f));
     g.drawLine ((float)macroStripW, (float)macroTop, (float)macroStripW, (float)getHeight(), 1.0f);
 }
@@ -208,31 +268,35 @@ void ChainHostEditor::resized()
     int chainTop = 48;
     if (presetBrowserOpen) { presetBrowser.setBounds (0, 48, getWidth(), 140); chainTop = 188; }
 
-    int macroTop = getHeight() - 230;
+    int macroTop = getHeight() - 390;
     chainViewport.setBounds (0, chainTop, getWidth(), macroTop - chainTop);
     
     auto& cg = proc.getChainGraph();
     chainContainer.setSize (getWidth(), cg.getNumChains() * 88);
 
-    int macroStripW = 160;
-    int macroColW = 74;
-    int macroRowH = 54;
-    int macroStartY = macroTop + 14;
+    int macroStripW = 200;
+    int cellW = macroStripW / 2;
+    int cellH = (getHeight() - macroTop - 26) / 4;
+    int gridTop = macroTop + 26;
     for (int i = 0; i < MacroManager::numMacros; ++i) {
         int col = i / 4;
         int row2 = i % 4;
-        int mx = 6 + col * macroColW;
-        int my = macroStartY + row2 * macroRowH;
-        macroLabels[i].setBounds (mx, my, macroColW, 10);
-        macroKnobs[i].setBounds (mx + 2, my + 10, macroColW - 4, 32);
-        learnButtons[i].setBounds (mx + 8, my + 44, macroColW - 16, 14);
+        int cx = col * cellW;
+        int cy = gridTop + row2 * cellH;
+        // LEARN pill above knob
+        macroLearnBtns[i].setBounds (cx + 8, cy + 2, cellW - 16, 14);
+        // Knob centered, smaller
+        int knobSz = juce::jmin (cellW - 20, cellH - 40);
+        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 18, knobSz, knobSz);
+        // Label at bottom
+        macroLabels[i].setBounds (cx + 2, cy + cellH - 14, cellW - 4, 12);
+        // Drag handle + link at bottom corners
+        macroDragHandles[i]->setBounds (cx + 4, cy + cellH - 28, 22, 16);
+        macroLinkBtns[i].setBounds (cx + cellW - 26, cy + cellH - 28, 22, 16);
     }
 
     int panelLeft = macroStripW + 4;
-    tabMappings.setBounds (panelLeft, macroTop + 4, 76, 18);
-    tabLfo.setBounds (panelLeft + 82, macroTop + 4, 44, 18);
-    int panelTop = macroTop + 26;
-    mappingPanel.setBounds (panelLeft, panelTop, getWidth() - panelLeft, getHeight() - panelTop);
+    int panelTop = macroTop + 4;
     lfoPanel.setBounds (panelLeft, panelTop, getWidth() - panelLeft, getHeight() - panelTop);
 }
 
@@ -279,73 +343,84 @@ void ChainHostEditor::refreshChainView()
             chainContainer.addAndMakeVisible (comp);
         }
     }
-    resized(); repaint();
+    resized();
+    chainContainer.resized();
+    repaint();
 }
 
 void ChainHostEditor::refreshMacroLabels()
 {
     for (int i = 0; i < MacroManager::numMacros; ++i) {
+        if (! macroLabels[i].isBeingEdited())
+            macroLabels[i].setText (macroNames[i], juce::dontSendNotification);
         auto& mappings = proc.getMacroManager().getMappings (i);
-        if (mappings.empty()) {
-            macroLabels[i].setText ("MACRO " + juce::String (i + 1), juce::dontSendNotification);
-            macroLabels[i].setColour (juce::Label::textColourId, Colors::textDim);
-        } else {
-            juce::String name;
-            for (auto& m : mappings) {
-                auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
-                if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
-                    auto& params = node->getProcessor()->getParameters();
-                    if (m.paramIndex < params.size()) {
-                        if (name.isNotEmpty()) name += ", ";
-                        name += params[m.paramIndex]->getName (20);
-                    }
-                }
-            }
-            if (name.isEmpty()) name = "?";
-            if (name.length() > 28) name = name.substring (0, 25) + "...";
-            macroLabels[i].setText (name, juce::dontSendNotification);
-            macroLabels[i].setColour (juce::Label::textColourId, Colors::accent);
-        }
+        macroLabels[i].setColour (juce::Label::textColourId,
+            mappings.empty() ? Colors::textDim : Colors::accent);
     }
+    repaint();  // for link count in paint()
 }
 
 void ChainHostEditor::mouseDown (const juce::MouseEvent& e)
 {
+    // Left-click on macro label or drag handle selects that macro
+    if (e.mods.isLeftButtonDown() && !e.mods.isPopupMenu())
+    {
+        for (int i = 0; i < MacroManager::numMacros; ++i)
+            if (e.eventComponent == &macroLabels[i] || e.eventComponent == macroDragHandles[i])
+            {
+                selectMacro (i);
+                refreshMacroLabels();
+                return;
+            }
+    }
+
     if (e.mods.isPopupMenu())
     {
         for (int i = 0; i < MacroManager::numMacros; ++i)
         {
-            if (e.eventComponent == &macroLabels[i])
+            if (e.eventComponent == &macroLabels[i] || e.eventComponent == macroDragHandles[i])
             {
+                selectMacro (i);
                 auto& mappings = proc.getMacroManager().getMappings (i);
-                if (mappings.empty()) return;
 
                 juce::PopupMenu menu;
-                menu.addSectionHeader ("Macro " + juce::String (i + 1) + " Mappings");
-                int id = 1;
-                for (auto& m : mappings) {
-                    juce::String itemName = "?";
-                    auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
-                    if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
-                        auto& params = node->getProcessor()->getParameters();
-                        if (m.paramIndex < params.size())
-                            itemName = node->getProcessor()->getName() + " > " + params[m.paramIndex]->getName (30);
-                    }
-                    menu.addItem (id++, "Remove: " + itemName);
-                }
+                menu.addItem (2000, "Rename...");
                 menu.addSeparator();
-                menu.addItem (1000, "Clear All Mappings");
+
+                if (!mappings.empty())
+                {
+                    menu.addSectionHeader ("Mappings (" + juce::String ((int)mappings.size()) + ")");
+                    int id = 1;
+                    for (auto& m : mappings) {
+                        juce::String itemName = "?";
+                        if (m.slotUid == InternalParams::uid) {
+                            itemName = "ChainHost > " + InternalParams::paramName (m.paramIndex);
+                        } else {
+                            auto nodeId = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+                            if (auto* node = proc.getGraph().getNodeForId (nodeId)) {
+                                auto& params = node->getProcessor()->getParameters();
+                                if (m.paramIndex < params.size())
+                                    itemName = node->getProcessor()->getName() + " > " + params[m.paramIndex]->getName (30);
+                            }
+                        }
+                        menu.addItem (id++, "Remove: " + itemName);
+                    }
+                    menu.addSeparator();
+                    menu.addItem (1000, "Clear All Mappings");
+                }
 
                 menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (macroLabels[i]),
                     [this, i, mappings] (int result) {
-                        if (result == 1000) {
+                        if (result == 2000) {
+                            showMacroRenameEditor (i);
+                        } else if (result == 1000) {
                             proc.getMacroManager().clearMappings (i);
+                            refreshMacroLabels();
                         } else if (result > 0 && result <= (int) mappings.size()) {
                             auto& m = mappings[(size_t) result - 1];
                             proc.getMacroManager().removeMapping (i, m.slotUid, m.paramIndex);
+                            refreshMacroLabels();
                         }
-                        refreshMacroLabels();
-                        mappingPanel.refresh();
                     });
                 return;
             }
@@ -380,7 +455,9 @@ void ChainHostEditor::openPluginWindow (juce::AudioProcessorGraph::NodeID nodeId
     if (auto* editor = plugProc->createEditor())
         pluginWindows.add (new PluginWindow (plugProc->getName(), nodeId, editor,
             getTopLevelComponent(),
-            [this] (auto nid) { windowCloseTimestamps[nid.uid] = juce::Time::getMillisecondCounter(); }));
+            [this] (auto nid) {
+                windowCloseTimestamps[nid.uid] = juce::Time::getMillisecondCounter();
+            }));
 }
 
 void ChainHostEditor::closePluginWindow (juce::AudioProcessorGraph::NodeID nodeId) {
@@ -395,12 +472,6 @@ void ChainHostEditor::cleanupClosedWindows() {
         (now - it->second) > kReopenCooldownMs * 2 ? it = windowCloseTimestamps.erase (it) : ++it;
 }
 
-void ChainHostEditor::setActiveTab (int tab) {
-    activeTab = tab;
-    mappingPanel.setVisible (tab == 0); lfoPanel.setVisible (tab == 1);
-    tabMappings.setColour (juce::TextButton::buttonColourId, tab == 0 ? Colors::accent.withAlpha (0.45f) : Colors::surfaceRaised);
-    tabLfo.setColour (juce::TextButton::buttonColourId, tab == 1 ? Colors::lfoBlue.withAlpha (0.45f) : Colors::surfaceRaised);
-}
 
 bool ChainHostEditor::isInterestedInFileDrag (const juce::StringArray& files)
 {
@@ -461,4 +532,135 @@ void ChainHostEditor::filesDropped (const juce::StringArray& files, int /*x*/, i
         }
     }
     refreshChainView();
+}
+
+//==============================================================================
+// MacroDragHandle
+//==============================================================================
+
+void ChainHostEditor::MacroDragHandle::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat().reduced (1);
+    g.setColour (selected ? Colors::accent.withAlpha (0.5f) : Colors::surfaceRaised.withAlpha (0.6f));
+    g.fillRoundedRectangle (b, 3.0f);
+
+    // Draw 4-way arrows (up/down/left/right from center)
+    g.setColour (selected ? Colors::text : Colors::textDim);
+    float cx = b.getCentreX(), cy = b.getCentreY();
+    float armLen = juce::jmin (b.getWidth(), b.getHeight()) * 0.28f;
+    float headSz = armLen * 0.45f;
+    float thick = 1.2f;
+
+    // Lines from center
+    g.drawLine (cx, cy - armLen, cx, cy + armLen, thick);   // vertical
+    g.drawLine (cx - armLen, cy, cx + armLen, cy, thick);   // horizontal
+
+    // Up arrow head
+    g.drawLine (cx, cy - armLen, cx - headSz, cy - armLen + headSz, thick);
+    g.drawLine (cx, cy - armLen, cx + headSz, cy - armLen + headSz, thick);
+    // Down arrow head
+    g.drawLine (cx, cy + armLen, cx - headSz, cy + armLen - headSz, thick);
+    g.drawLine (cx, cy + armLen, cx + headSz, cy + armLen - headSz, thick);
+    // Left arrow head
+    g.drawLine (cx - armLen, cy, cx - armLen + headSz, cy - headSz, thick);
+    g.drawLine (cx - armLen, cy, cx - armLen + headSz, cy + headSz, thick);
+    // Right arrow head
+    g.drawLine (cx + armLen, cy, cx + armLen - headSz, cy - headSz, thick);
+    g.drawLine (cx + armLen, cy, cx + armLen - headSz, cy + headSz, thick);
+}
+
+void ChainHostEditor::MacroDragHandle::mouseDown (const juce::MouseEvent&)
+{
+    // Select this macro
+    if (auto* editor = findParentComponentOfClass<ChainHostEditor>())
+        editor->selectMacro (macroIndex);
+}
+
+void ChainHostEditor::MacroDragHandle::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.getDistanceFromDragStart() > 4)
+        if (auto* dc = juce::DragAndDropContainer::findParentDragContainerFor (this))
+            dc->startDragging ("macro:" + juce::String (macroIndex), this);
+}
+
+void ChainHostEditor::selectMacro (int i)
+{
+    selectedMacro = juce::jlimit (0, MacroManager::numMacros - 1, i);
+    for (int j = 0; j < MacroManager::numMacros; ++j)
+        macroDragHandles[j]->selected = (j == selectedMacro);
+    refreshMacroLabels();
+    repaint();
+}
+
+void ChainHostEditor::showMacroLinkMenu (int macroIdx)
+{
+    juce::PopupMenu menu;
+    auto& cg = proc.getChainGraph();
+    int itemId = 1;
+    struct PI { juce::String uid; int p; };
+    std::vector<PI> lookup;
+
+    for (int ci = 0; ci < cg.getNumChains(); ++ci)
+        for (auto& slot : cg.getChain (ci).slots)
+            if (auto* node = proc.getGraph().getNodeForId (slot.nodeId))
+            {
+                auto& params = node->getProcessor()->getParameters();
+                if (params.isEmpty()) continue;
+                juce::PopupMenu sub;
+                for (int pi = 0; pi < params.size(); ++pi)
+                {
+                    lookup.push_back ({ slot.uid, pi });
+                    sub.addItem (itemId++, params[pi]->getName (40));
+                }
+                auto lbl = node->getProcessor()->getName();
+                if (cg.getNumChains() > 1)
+                    lbl = "Chain " + juce::String (ci + 1) + " > " + lbl;
+                menu.addSubMenu (lbl, sub);
+            }
+
+    if (itemId == 1)
+    {
+        menu.addItem (-1, "(No plugins loaded)", false, false);
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (macroLinkBtns[macroIdx]),
+        [this, macroIdx, lookup] (int r)
+        {
+            if (r > 0 && r <= (int) lookup.size())
+            {
+                proc.getMacroManager().addMapping (macroIdx,
+                    lookup[(size_t)(r - 1)].uid, lookup[(size_t)(r - 1)].p, 0.0f, 1.0f);
+                refreshMacroLabels();
+            }
+        });
+}
+
+//==============================================================================
+// MacroLinkButton — draws chain link icon
+//==============================================================================
+
+void ChainHostEditor::MacroLinkButton::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat().reduced (1);
+    g.setColour (Colors::surfaceRaised.withAlpha (0.6f));
+    g.fillRoundedRectangle (b, 3.0f);
+
+    // Draw chain link icon: two interlocking ovals
+    g.setColour (Colors::textDim);
+    float cx = b.getCentreX(), cy = b.getCentreY();
+    float linkW = b.getWidth() * 0.3f, linkH = b.getHeight() * 0.22f;
+    float gap = linkW * 0.25f;
+    // Left link
+    g.drawRoundedRectangle (cx - linkW - gap * 0.5f, cy - linkH, linkW * 1.4f, linkH * 2.0f, linkH, 1.2f);
+    // Right link
+    g.drawRoundedRectangle (cx + gap * 0.5f - linkW * 0.4f, cy - linkH, linkW * 1.4f, linkH * 2.0f, linkH, 1.2f);
+}
+
+//==============================================================================
+// showMacroRenameEditor
+//==============================================================================
+
+void ChainHostEditor::showMacroRenameEditor (int macroIdx)
+{
+    macroLabels[macroIdx].showEditor();
 }

@@ -141,7 +141,7 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
             for (auto& target : lfo.targets)
             {
                 if (target.type == LfoTarget::Macro)
-                    macros.setMacroValue (target.macroIndex, output, graph, chainGraph);
+                    macros.setMacroValue (target.macroIndex, output, graph, chainGraph, this);
                 else if (auto* node = graph.getNodeForId (target.nodeId))
                 {
                     auto& params = node->getProcessor()->getParameters();
@@ -190,7 +190,7 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
 
         // ── Compute raw waveform value ───────────────────────────
         float raw;
-        if (lfo.useCustomShape && ! lfo.breakpoints.empty())
+        if (! lfo.breakpoints.empty())
             raw = customWaveformAt (lfo.breakpoints, lfo.phase);
         else
             raw = waveformAt (lfo.shape, lfo.phase, lfo.lastRandom, lfo.prevRandom);
@@ -237,7 +237,7 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
         for (auto& target : lfo.targets)
         {
             if (target.type == LfoTarget::Macro)
-                macros.setMacroValue (target.macroIndex, output, graph, chainGraph);
+                macros.setMacroValue (target.macroIndex, output, graph, chainGraph, this);
             else if (auto* node = graph.getNodeForId (target.nodeId))
             {
                 auto& params = node->getProcessor()->getParameters();
@@ -318,14 +318,86 @@ float LfoEngine::customWaveformAt (const std::vector<LfoBreakpoint>& bp, float p
 
 std::vector<LfoBreakpoint> LfoEngine::defaultBreakpoints()
 {
-    // 8-point sine approximation
-    return {
-        { 0.0f,   0.5f,   0.5f },
-        { 0.25f,  1.0f,   0.0f },
-        { 0.5f,   0.5f,  -0.5f },
-        { 0.75f,  0.0f,   0.0f },
-        { 1.0f,   0.5f,   0.5f }
-    };
+    return generateBreakpointsForShape (Sine);
+}
+
+std::vector<LfoBreakpoint> LfoEngine::generateBreakpointsForShape (Shape shape)
+{
+    switch (shape)
+    {
+        case Sine:
+            // Approximate sine: each segment needs the right curve direction
+            // 0→0.25: rising from 0.5 to 1.0, slow start = negative curve (concave up)
+            // 0.25→0.5: falling from 1.0 to 0.5, slow end = positive curve
+            // 0.5→0.75: falling from 0.5 to 0.0, slow start = negative curve
+            // 0.75→1.0: rising from 0.0 to 0.5, slow end = positive curve
+            return {
+                { 0.0f,   0.5f,  -0.6f },
+                { 0.25f,  1.0f,   0.6f },
+                { 0.5f,   0.5f,  -0.6f },
+                { 0.75f,  0.0f,   0.6f },
+                { 1.0f,   0.5f,   0.0f }
+            };
+        case Triangle:
+            return {
+                { 0.0f,   0.0f,   0.0f },
+                { 0.5f,   1.0f,   0.0f },
+                { 1.0f,   0.0f,   0.0f }
+            };
+        case SawUp:
+            return {
+                { 0.0f,   0.0f,   0.0f },
+                { 1.0f,   1.0f,   0.0f }
+            };
+        case SawDown:
+            return {
+                { 0.0f,   1.0f,   0.0f },
+                { 1.0f,   0.0f,   0.0f }
+            };
+        case Square:
+            return {
+                { 0.0f,    1.0f,  0.0f },
+                { 0.499f,  1.0f,  0.0f },
+                { 0.5f,    0.0f,  0.0f },
+                { 0.999f,  0.0f,  0.0f },
+                { 1.0f,    1.0f,  0.0f }
+            };
+        case SampleHold:
+            // 8 random-ish steps
+            return {
+                { 0.0f,    0.8f,  0.0f },
+                { 0.125f,  0.8f,  0.0f },
+                { 0.125f,  0.3f,  0.0f },
+                { 0.25f,   0.3f,  0.0f },
+                { 0.25f,   0.9f,  0.0f },
+                { 0.375f,  0.9f,  0.0f },
+                { 0.375f,  0.1f,  0.0f },
+                { 0.5f,    0.1f,  0.0f },
+                { 0.5f,    0.6f,  0.0f },
+                { 0.625f,  0.6f,  0.0f },
+                { 0.625f,  0.4f,  0.0f },
+                { 0.75f,   0.4f,  0.0f },
+                { 0.75f,   0.7f,  0.0f },
+                { 0.875f,  0.7f,  0.0f },
+                { 0.875f,  0.2f,  0.0f },
+                { 1.0f,    0.2f,  0.0f }
+            };
+        case SampleGlide:
+            // 8 points with linear interp (no curve)
+            return {
+                { 0.0f,    0.8f,  0.0f },
+                { 0.125f,  0.3f,  0.0f },
+                { 0.25f,   0.9f,  0.0f },
+                { 0.375f,  0.1f,  0.0f },
+                { 0.5f,    0.6f,  0.0f },
+                { 0.625f,  0.4f,  0.0f },
+                { 0.75f,   0.7f,  0.0f },
+                { 0.875f,  0.2f,  0.0f },
+                { 1.0f,    0.5f,  0.0f }
+            };
+        default:
+            return { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.5f, 0.0f } };
+    }
 }
 
 //==============================================================================
@@ -338,8 +410,8 @@ juce::String LfoEngine::shapeName (Shape s)
     {
         case Sine:        return "Sine";
         case Triangle:    return "Tri";
-        case SawUp:       return "Saw\xe2\x86\x91";
-        case SawDown:     return "Saw\xe2\x86\x93";
+        case SawUp:       return "Saw 1";
+        case SawDown:     return "Saw 2";
         case Square:      return "Sqr";
         case SampleHold:  return "S&H";
         case SampleGlide: return "S&G";
@@ -407,7 +479,7 @@ std::unique_ptr<juce::XmlElement> LfoEngine::toXml() const
         lx->setAttribute ("envelopeMode", lfo.envelopeMode);
         lx->setAttribute ("riseTime",     (double) lfo.riseTime);
         lx->setAttribute ("smooth",       (double) lfo.smooth);
-        lx->setAttribute ("useCustom",    lfo.useCustomShape);
+        // useCustomShape removed — breakpoints are always used
 
         // Breakpoints
         if (! lfo.breakpoints.empty())
@@ -457,7 +529,7 @@ void LfoEngine::fromXml (const juce::XmlElement& xml)
         lfo.envelopeMode  = lx->getBoolAttribute   ("envelopeMode", false);
         lfo.riseTime      = (float) lx->getDoubleAttribute ("riseTime", 0.0);
         lfo.smooth        = (float) lx->getDoubleAttribute ("smooth",   0.0);
-        lfo.useCustomShape = lx->getBoolAttribute  ("useCustom",    false);
+        // useCustomShape removed — breakpoints always used (backwards compat: ignored)
 
         // Breakpoints
         if (auto* bpXml = lx->getChildByName ("Breakpoints"))
