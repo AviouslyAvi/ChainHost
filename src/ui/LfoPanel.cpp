@@ -268,17 +268,17 @@ void LfoPanel::paint (juce::Graphics& g)
     g.drawRoundedRectangle (8.0f, (float) wfTop - 2.0f, (float) wfRight - 12.0f, (float) wfH + 4.0f, 2.0f, 1.0f);
 
     // Grid controls labels
-    g.setColour (Colors::textDim.withAlpha (0.5f));
-    g.setFont (juce::Font (juce::FontOptions (8.0f)));
-    g.drawText ("X", wfRight - 114, gridRowY, 12, 18, juce::Justification::centredRight);
-    g.drawText ("Y", wfRight - 64, gridRowY, 12, 18, juce::Justification::centredRight);
+    g.setColour (Colors::textDim.withAlpha (0.7f));
+    g.setFont (juce::Font (juce::FontOptions (11.0f)));
+    g.drawText ("X", wfRight - 118, gridRowY, 16, 20, juce::Justification::centredRight);
+    g.drawText ("Y", wfRight - 68, gridRowY, 16, 20, juce::Justification::centredRight);
 
     // Knob section box — centered under waveform
     int knobW = 64;
     int knobTotalW = knobW * 6;
     int wfW = wfRight - 10;
     int knobStartX = 10 + (wfW - knobTotalW) / 2;
-    int ky = gridRowY + 24;
+    int ky = gridRowY + 30;
     g.setColour (Colors::border.withAlpha (0.25f));
     g.drawRoundedRectangle ((float) knobStartX - 4.0f, (float) ky - 2.0f,
         (float) knobTotalW + 8.0f, 86.0f, 3.0f, 1.0f);
@@ -340,11 +340,11 @@ void LfoPanel::resized()
 
     // Grid size controls below waveform — right-aligned to waveform
     int gridY2 = toolY + tbH + 2 + wfH + 2;
-    gridXBox.setBounds (wfRight - 100, gridY2, 40, 18);
-    gridYBox.setBounds (wfRight - 50, gridY2, 40, 18);
+    gridXBox.setBounds (wfRight - 100, gridY2, 44, 20);
+    gridYBox.setBounds (wfRight - 50, gridY2, 44, 20);
 
-    // Knob section — centered under the waveform area
-    int ky = gridY2 + 24;
+    // Knob section — centered under the waveform area (6px extra gap for grid row)
+    int ky = gridY2 + 30;
     int knobW = 64;
     int knobH = 80;
     int knobTotalW = knobW * 6;
