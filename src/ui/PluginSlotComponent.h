@@ -4,7 +4,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <melatonin_blur/melatonin_blur.h>
 #include "Colors.h"
-#include "FabKnob.h"
+#include "ArcKnob.h"
 
 class ChainHostProcessor;
 
@@ -33,7 +33,7 @@ private:
     bool dragHover = false;
     juce::TextButton bypassButton { "ON" };
     juce::Label nameLabel;
-    FabKnob dryWetKnob;
+    ArcKnob dryWetKnob;
     juce::TextButton removeButton { juce::CharPointer_UTF8 ("\xc3\x97") };
     melatonin::DropShadow cardShadow { { juce::Colours::black.withAlpha (0.5f), 8, { 0, 3 } } };
     melatonin::DropShadow accentGlow;

@@ -224,9 +224,9 @@ void LfoPanel::paint (juce::Graphics& g)
     g.drawText ("Y", wfRight - 64, gridRowY, 12, 16, juce::Justification::centredRight);
 
     // Knob section box
-    int ky = gridRowY + 20;
+    int ky = gridRowY + 22;
     g.setColour (Colors::border.withAlpha (0.25f));
-    g.drawRoundedRectangle (6.0f, (float) ky - 4.0f, 274.0f, 66.0f, 3.0f, 1.0f);
+    g.drawRoundedRectangle (6.0f, (float) ky - 2.0f, 274.0f, 74.0f, 3.0f, 1.0f);
 
     // --- Targets section ---
     int targetsX = getWidth() / 2 + 10;
@@ -280,14 +280,15 @@ void LfoPanel::resized()
     gridXBox.setBounds (wfRight - 100, gridY2, 40, 16);
     gridYBox.setBounds (wfRight - 50, gridY2, 40, 16);
 
-    int ky = gridY2 + 20;
+    int ky = gridY2 + 22;
     int knobW = 44;
-    rateKnob.setBounds (10, ky, knobW, 60);
-    depthKnob.setBounds (10 + knobW, ky, knobW, 60);
-    delayKnob.setBounds (10 + knobW * 2, ky, knobW, 60);
-    phaseKnob.setBounds (10 + knobW * 3, ky, knobW, 60);
-    riseKnob.setBounds (10 + knobW * 4, ky, knobW, 60);
-    smoothKnob.setBounds (10 + knobW * 5, ky, knobW, 60);
+    int knobH = 68;
+    rateKnob.setBounds (10, ky, knobW, knobH);
+    depthKnob.setBounds (10 + knobW, ky, knobW, knobH);
+    delayKnob.setBounds (10 + knobW * 2, ky, knobW, knobH);
+    phaseKnob.setBounds (10 + knobW * 3, ky, knobW, knobH);
+    riseKnob.setBounds (10 + knobW * 4, ky, knobW, knobH);
+    smoothKnob.setBounds (10 + knobW * 5, ky, knobW, knobH);
 
     int targetsX = getWidth() / 2 + 10;
     addTargetButton.setBounds (targetsX + 90, 26, 72, 18);
@@ -409,8 +410,8 @@ void LfoPanel::updatePhase()
     delayKnob.setValue (lfo.delayTime, false);
     phaseKnob.setValue (lfo.startPhase, false);
 
-    // ── Blue Halo: compute modulation depth per knob from macro mappings ──
-    FabKnob* knobs[] = { &rateKnob, &depthKnob, &riseKnob, &smoothKnob, &delayKnob, &phaseKnob };
+    // ── Blue Halo: show full modulation range per knob from macro mappings ──
+    ArcKnob* knobs[] = { &rateKnob, &depthKnob, &riseKnob, &smoothKnob, &delayKnob, &phaseKnob };
     auto& mm = proc.getMacroManager();
 
     for (int kp = 0; kp < InternalParams::paramsPerLfo; ++kp)
@@ -423,10 +424,7 @@ void LfoPanel::updatePhase()
             for (auto& m : mm.getMappings (mi))
             {
                 if (m.slotUid == InternalParams::uid && m.paramIndex == internalIdx)
-                {
-                    float macroVal = mm.getLastValue (mi);
-                    totalMod += macroVal * (m.maxValue - m.minValue);
-                }
+                    totalMod += m.maxValue - m.minValue;
             }
         }
 
@@ -540,4 +538,19 @@ void LfoPanel::setupMacroDropHandlers()
     smoothKnob.onMacroDropped = makeHandler (3);
     delayKnob.onMacroDropped  = makeHandler (4);
     phaseKnob.onMacroDropped  = makeHandler (5);
+
+    // Alt+drag on knob adjusts macro modulation depth
+    auto makeModHandler = [this] (int paramOffset) {
+        return [this, paramOffset] (float newDepth) {
+            int internalIdx = activeLfo * InternalParams::paramsPerLfo + paramOffset;
+            proc.getMacroManager().setMappingRange (InternalParams::uid, internalIdx,
+                                                    juce::jlimit (0.0f, 1.0f, newDepth));
+        };
+    };
+    rateKnob.onModDepthChanged   = makeModHandler (0);
+    depthKnob.onModDepthChanged  = makeModHandler (1);
+    riseKnob.onModDepthChanged   = makeModHandler (2);
+    smoothKnob.onModDepthChanged = makeModHandler (3);
+    delayKnob.onModDepthChanged  = makeModHandler (4);
+    phaseKnob.onModDepthChanged  = makeModHandler (5);
 }

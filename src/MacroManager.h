@@ -47,6 +47,7 @@ public:
     void addMapping (int macroIndex, const juce::String& slotUid,
                      int paramIndex, float minVal, float maxVal);
     void removeMapping (int macroIndex, const juce::String& slotUid, int paramIndex);
+    void setMappingRange (const juce::String& slotUid, int paramIndex, float newMax);
     void clearMappings (int macroIndex);
     void removeMappingsForUid (const juce::String& slotUid);
 

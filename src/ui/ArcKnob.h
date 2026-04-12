@@ -1,13 +1,13 @@
 #pragma once
-// FabKnob — arc knob using juce::Slider + CopperLookAndFeel + value overlay
+// ArcKnob — rotary arc knob with modulation halo ring
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "Colors.h"
 
-class FabKnob : public juce::Component, public juce::DragAndDropTarget
+class ArcKnob : public juce::Component, public juce::DragAndDropTarget
 {
 public:
-    FabKnob (const juce::String& label = {}, juce::Colour arcCol = Colors::accent);
+    ArcKnob (const juce::String& label = {}, juce::Colour arcCol = Colors::accent);
 
     void resized() override;
     void paint (juce::Graphics&) override;
@@ -27,6 +27,9 @@ public:
     juce::Slider& getSlider() { return slider; }
     std::function<void()> onValueChange;
 
+    // Called when user drags the halo ring to change mod depth: (newDepth)
+    std::function<void (float)> onModDepthChanged;
+
     // Macro drag-drop target
     bool isInterestedInDragSource (const SourceDetails& details) override;
     void itemDropped (const SourceDetails& details) override;
@@ -41,7 +44,30 @@ private:
     juce::String label, suffix = "%";
     juce::Colour arcColour;
     float defaultValue = 0.0f;
-    float modDepth = 0.0f;  // -1..+1 normalised modulation depth for blue halo
+    float modDepth = 0.0f;  // 0..1 normalised modulation depth for blue halo
     bool showPercentage = true;
     bool macroDragHover = false;
+
+    // Halo ring drag state
+    bool draggingModDepth = false;
+    float modDragStartDepth = 0.0f;
+    float modDragStartY = 0.0f;
+
+    // Halo geometry helpers
+    void getArcGeometry (float& cx, float& cy, float& radius,
+                         float& startAngle, float& arcRange) const;
+    bool hitTestHalo (float mx, float my) const;
+
+    // Transparent overlay that sits on top of the slider to catch halo clicks
+    struct HaloOverlay : public juce::Component
+    {
+        ArcKnob& owner;
+        HaloOverlay (ArcKnob& o) : owner (o) { setInterceptsMouseClicks (true, false); }
+        bool hitTest (int x, int y) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
+        void mouseMove (const juce::MouseEvent&) override;
+    };
+    HaloOverlay haloOverlay { *this };
 };

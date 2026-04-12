@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Colors.h"
-#include "FabKnob.h"
+#include "ArcKnob.h"
 #include "../MacroManager.h"
 
 class ChainHostProcessor;
@@ -31,7 +31,7 @@ private:
     juce::TextButton mapButton { "+ MAP" }, learnButton { "LEARN" };
     struct MappingRow {
         juce::Label label;
-        FabKnob minKnob { "Min", Colors::textMid }, maxKnob { "Max", Colors::textMid };
+        ArcKnob minKnob { "Min", Colors::textMid }, maxKnob { "Max", Colors::textMid };
         juce::TextButton removeButton { juce::CharPointer_UTF8 ("\xc3\x97") };
         juce::String slotUid; int paramIndex;
     };

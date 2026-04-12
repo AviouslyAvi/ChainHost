@@ -198,7 +198,7 @@ void ChainHostEditor::ChainContainer::resized()
         int y = ci * 88;
         row->volumeKnob.setBounds (44, y + 4, 50, 68);
         int px = 100;
-        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 120, 84); px += 126; }
+        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 140, 84); px += 146; }
         row->addToChainButton.setBounds (px + 4, y + 28, 30, 30);
         row->removeChainButton.setBounds (getWidth() - 30, y + 32, 22, 22);
     }
@@ -325,7 +325,7 @@ void ChainHostEditor::resized()
         macroLearnBtns[i].setBounds (cx + 8, cy + 2, cellW - 16, 14);
         // Knob centered, smaller
         int knobSz = juce::jmin (cellW - 20, cellH - 40);
-        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 18, knobSz, knobSz);
+        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 14, knobSz, knobSz + 8);
         // Label at bottom
         macroLabels[i].setBounds (cx + 2, cy + cellH - 14, cellW - 4, 12);
         // Drag handle + link at bottom corners

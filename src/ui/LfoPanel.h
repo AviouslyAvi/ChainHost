@@ -2,7 +2,7 @@
 // LfoPanel — Serum-style LFO control panel with 4 LFOs
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Colors.h"
-#include "FabKnob.h"
+#include "ArcKnob.h"
 #include "LfoWaveformEditor.h"
 #include "../LfoEngine.h"
 
@@ -25,9 +25,9 @@ private:
 
     juce::TextButton enableButton { "OFF" };
     juce::ComboBox shapeBox;
-    FabKnob rateKnob { "Rate", Colors::lfoBlue }, depthKnob { "Depth", Colors::lfoBlue };
-    FabKnob delayKnob { "Delay", Colors::lfoBlue }, phaseKnob { "Phase", Colors::lfoBlue };
-    FabKnob riseKnob { "Rise", Colors::lfoBlue }, smoothKnob { "Smooth", Colors::lfoBlue };
+    ArcKnob rateKnob { "Rate", Colors::lfoBlue }, depthKnob { "Depth", Colors::lfoBlue };
+    ArcKnob delayKnob { "Delay", Colors::lfoBlue }, phaseKnob { "Phase", Colors::lfoBlue };
+    ArcKnob riseKnob { "Rise", Colors::lfoBlue }, smoothKnob { "Smooth", Colors::lfoBlue };
 
     juce::TextButton syncButton { "FREE" };
     juce::TextButton retrigButton { "TRIG" };

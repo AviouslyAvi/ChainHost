@@ -5,7 +5,7 @@
 #include <melatonin_inspector/melatonin_inspector.h>
 #include "Colors.h"
 #include "ChainHostLookAndFeel.h"
-#include "FabKnob.h"
+#include "ArcKnob.h"
 #include "PluginWindow.h"
 #include "PluginSlotComponent.h"
 #include "PresetBrowser.h"
@@ -40,7 +40,7 @@ private:
 
     struct ChainViewRow {
         juce::OwnedArray<PluginSlotComponent> slotComponents;
-        FabKnob volumeKnob { "Vol", Colors::chainAccent };
+        ArcKnob volumeKnob { "Vol", Colors::chainAccent };
         juce::TextButton removeChainButton { juce::CharPointer_UTF8 ("\xc3\x97") },
                          addToChainButton { "+" };
     };
@@ -62,7 +62,7 @@ private:
     static constexpr int kScrollHideTicks = 40; // ~2 seconds at 50ms timer
     float scrollAlpha = 0.0f;
 
-    FabKnob macroKnobs[MacroManager::numMacros];
+    ArcKnob macroKnobs[MacroManager::numMacros];
     juce::Label macroLabels[MacroManager::numMacros];
 
     // Drag handle for each macro — shows ✥ icon, draggable onto target params

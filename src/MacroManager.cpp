@@ -74,6 +74,15 @@ void MacroManager::removeMapping (int macroIndex, const juce::String& slotUid, i
         v.end());
 }
 
+void MacroManager::setMappingRange (const juce::String& slotUid, int paramIndex, float newMax)
+{
+    const juce::ScopedLock sl (lock);
+    for (int i = 0; i < numMacros; ++i)
+        for (auto& m : mappings[i])
+            if (m.slotUid == slotUid && m.paramIndex == paramIndex)
+                m.maxValue = newMax;
+}
+
 void MacroManager::clearMappings (int macroIndex)
 {
     if (macroIndex >= 0 && macroIndex < numMacros)

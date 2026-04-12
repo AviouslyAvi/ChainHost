@@ -89,7 +89,7 @@ target_sources(ChainHost PRIVATE
     src/MacroManager.cpp
     src/LfoEngine.cpp
     src/ui/ChainHostLookAndFeel.cpp
-    src/ui/FabKnob.cpp
+    src/ui/ArcKnob.cpp
     src/ui/PluginWindow.cpp
     src/ui/PluginSlotComponent.cpp
     src/ui/PresetBrowser.cpp
