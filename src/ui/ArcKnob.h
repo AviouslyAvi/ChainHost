@@ -38,6 +38,8 @@ public:
 
     // Called when a macro is dropped on this knob: (macroIndex)
     std::function<void (int)> onMacroDropped;
+    // Called when an LFO is dropped on this knob: (lfoIndex)
+    std::function<void (int)> onLfoDropped;
 
 private:
     juce::Slider slider;

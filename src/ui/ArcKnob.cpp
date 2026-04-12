@@ -195,7 +195,8 @@ void ArcKnob::HaloOverlay::mouseMove (const juce::MouseEvent&)
 
 bool ArcKnob::isInterestedInDragSource (const SourceDetails& details)
 {
-    return details.description.toString().startsWith ("macro:");
+    auto desc = details.description.toString();
+    return desc.startsWith ("macro:") || desc.startsWith ("lfo:");
 }
 
 void ArcKnob::itemDropped (const SourceDetails& details)
@@ -206,5 +207,10 @@ void ArcKnob::itemDropped (const SourceDetails& details)
     {
         int macroIdx = desc.fromFirstOccurrenceOf ("macro:", false, false).getIntValue();
         onMacroDropped (macroIdx);
+    }
+    else if (desc.startsWith ("lfo:") && onLfoDropped)
+    {
+        int lfoIdx = desc.fromFirstOccurrenceOf ("lfo:", false, false).getIntValue();
+        onLfoDropped (lfoIdx);
     }
 }

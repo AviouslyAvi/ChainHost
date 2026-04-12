@@ -218,9 +218,11 @@ void LfoPanel::paint (juce::Graphics& g)
 
     auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
 
-    int wfRight = getWidth() / 2 - 10;
+    int targetsW = 180;
+    int targetsX = getWidth() - targetsW;
+    int wfRight = targetsX - 10;
     int toolY = 46;
-    int wfBottom = toolY + 16 + 94;
+    int wfBottom = toolY + 16 + getHeight() - 200;
     int gridRowY = wfBottom + 2;
 
     // --- Section boxes ---
@@ -231,9 +233,10 @@ void LfoPanel::paint (juce::Graphics& g)
     // Tool bar box
     g.drawRoundedRectangle (6.0f, (float) toolY - 2.0f, (float) wfRight - 2.0f, 16.0f, 3.0f, 1.0f);
 
-    // Waveform box (drawn by the editor itself, add subtle outer glow)
+    // Waveform box
+    int wfH = wfBottom - toolY - 16;
     g.setColour (Colors::border.withAlpha (0.15f));
-    g.drawRoundedRectangle (8.0f, (float) toolY + 14.0f, (float) wfRight - 12.0f, 98.0f, 2.0f, 1.0f);
+    g.drawRoundedRectangle (8.0f, (float) toolY + 14.0f, (float) wfRight - 12.0f, (float) wfH + 4.0f, 2.0f, 1.0f);
 
     // Grid controls labels
     g.setColour (Colors::textDim.withAlpha (0.5f));
@@ -246,23 +249,20 @@ void LfoPanel::paint (juce::Graphics& g)
     g.setColour (Colors::border.withAlpha (0.25f));
     g.drawRoundedRectangle (6.0f, (float) ky - 2.0f, 274.0f, 74.0f, 3.0f, 1.0f);
 
-    // --- Targets section ---
-    int targetsX = getWidth() / 2 + 10;
-
-    // Targets box
+    // --- Targets section (narrow right column) ---
     g.setColour (Colors::border.withAlpha (0.25f));
-    g.drawRoundedRectangle ((float) targetsX - 6.0f, 24.0f,
-        (float) (getWidth() - targetsX + 2), (float) (getHeight() - 28), 3.0f, 1.0f);
+    g.drawRoundedRectangle ((float) targetsX - 6.0f, 4.0f,
+        (float) targetsW + 2.0f, (float) (getHeight() - 8), 3.0f, 1.0f);
 
     g.setColour (Colors::textDim.withAlpha (0.6f));
     g.setFont (juce::Font (juce::FontOptions (8.5f)));
-    g.drawText ("TARGETS", targetsX, 28, 80, 12, juce::Justification::centredLeft);
+    g.drawText ("TARGETS", targetsX, 8, 80, 12, juce::Justification::centredLeft);
 
     if (lfo.targets.empty())
     {
         g.setColour (Colors::textDim.withAlpha (0.3f));
         g.setFont (juce::Font (juce::FontOptions (9.0f)));
-        g.drawText ("No targets assigned", targetsX, 44, 200, 16, juce::Justification::centredLeft);
+        g.drawText ("No targets", targetsX, 38, targetsW - 10, 16, juce::Justification::centredLeft);
     }
 }
 
@@ -284,17 +284,22 @@ void LfoPanel::resized()
     envButton.setBounds (202, my, 32, 16);
     directionButton.setBounds (238, my, 32, 16);
 
-    int wfRight = getWidth() / 2 - 10;
+    int targetsW = 180;
+    int targetsX = getWidth() - targetsW;
+    int wfRight = targetsX - 10;
+
     // Tool buttons above waveform
     int toolY = 46;
     toolPointer.setBounds (10, toolY, 30, 14);
     toolFlat.setBounds (43, toolY, 36, 14);
     toolRampUp.setBounds (82, toolY, 24, 14);
     toolRampDown.setBounds (109, toolY, 24, 14);
-    waveformEditor.setBounds (10, toolY + 16, wfRight - 10, 94);
+
+    int wfH = getHeight() - 200 - 16;  // dynamic height
+    waveformEditor.setBounds (10, toolY + 16, wfRight - 10, wfH);
 
     // Grid size controls below waveform
-    int gridY2 = toolY + 16 + 96;
+    int gridY2 = toolY + 16 + wfH + 2;
     gridXBox.setBounds (wfRight - 100, gridY2, 40, 16);
     gridYBox.setBounds (wfRight - 50, gridY2, 40, 16);
 
@@ -308,17 +313,18 @@ void LfoPanel::resized()
     riseKnob.setBounds (10 + knobW * 4, ky, knobW, knobH);
     smoothKnob.setBounds (10 + knobW * 5, ky, knobW, knobH);
 
-    int targetsX = getWidth() / 2 + 10;
-    addTargetButton.setBounds (targetsX + 90, 26, 52, 18);
-    lfoDragHandle.setBounds (targetsX + 146, 26, 22, 18);
-    lfoLinkBtn.setBounds (targetsX + 172, 26, 22, 18);
-    lfoLearnBtn.setBounds (targetsX + 198, 26, 44, 18);
+    // Targets column (narrow right side)
+    int tBtnX = targetsX;
+    addTargetButton.setBounds (tBtnX, 22, 48, 16);
+    lfoDragHandle.setBounds (tBtnX + 52, 22, 22, 16);
+    lfoLinkBtn.setBounds (tBtnX + 78, 22, 22, 16);
+    lfoLearnBtn.setBounds (tBtnX + 104, 22, 44, 16);
 
-    int ty = 44;
+    int ty = 42;
     for (auto* tr : targetRows)
     {
-        tr->label.setBounds (targetsX, ty, getWidth() / 2 - 50, 16);
-        tr->removeButton.setBounds (getWidth() - 30, ty, 16, 16);
+        tr->label.setBounds (targetsX, ty, targetsW - 30, 16);
+        tr->removeButton.setBounds (targetsX + targetsW - 24, ty, 16, 16);
         ty += 19;
     }
 }

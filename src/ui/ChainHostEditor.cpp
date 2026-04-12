@@ -94,6 +94,15 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
 
         macroLinkBtns[i].onClick = [this, i]() { selectMacro (i); showMacroLinkMenu (i); };
         addAndMakeVisible (macroLinkBtns[i]);
+
+        // Accept LFO drag-drop on macro knobs → add as LFO target
+        macroKnobs[i].onLfoDropped = [this, i] (int lfoIdx) {
+            LfoTarget t;
+            t.type = LfoTarget::Macro;
+            t.macroIndex = i;
+            proc.getLfoEngine().addTarget (lfoIdx, t);
+            lfoPanel.refresh();
+        };
     }
     selectMacro (0);
 
@@ -222,8 +231,8 @@ void ChainHostEditor::paint (juce::Graphics& g)
         g.drawText ("v0.2", 138, 20, 30, 12, juce::Justification::centredLeft);
     }
 
-    int macroTop = getHeight() - 390;
-    int macroStripW = 200;
+    int macroTop = getHeight() - 440;
+    int macroStripW = 160;
 
     // Macro strip background
     g.setColour (Colors::bgDeep);
@@ -306,13 +315,13 @@ void ChainHostEditor::resized()
     int chainTop = 48;
     if (presetBrowserOpen) { presetBrowser.setBounds (0, 48, getWidth(), 140); chainTop = 188; }
 
-    int macroTop = getHeight() - 390;
+    int macroTop = getHeight() - 440;
     chainViewport.setBounds (0, chainTop, getWidth(), macroTop - chainTop);
-    
+
     auto& cg = proc.getChainGraph();
     chainContainer.setSize (getWidth(), cg.getNumChains() * 88);
 
-    int macroStripW = 200;
+    int macroStripW = 160;
     int cellW = macroStripW / 2;
     int cellH = (getHeight() - macroTop - 26) / 4;
     int gridTop = macroTop + 26;
@@ -322,15 +331,15 @@ void ChainHostEditor::resized()
         int cx = col * cellW;
         int cy = gridTop + row2 * cellH;
         // LEARN pill above knob
-        macroLearnBtns[i].setBounds (cx + 8, cy + 2, cellW - 16, 14);
-        // Knob centered, smaller
-        int knobSz = juce::jmin (cellW - 20, cellH - 40);
-        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 14, knobSz, knobSz + 8);
+        macroLearnBtns[i].setBounds (cx + 6, cy + 2, cellW - 12, 14);
+        // Knob centered with halo space
+        int knobSz = juce::jmin (cellW - 16, cellH - 44);
+        macroKnobs[i].setBounds (cx + (cellW - knobSz) / 2, cy + 16, knobSz, knobSz + 8);
         // Label at bottom
         macroLabels[i].setBounds (cx + 2, cy + cellH - 14, cellW - 4, 12);
         // Drag handle + link at bottom corners
-        macroDragHandles[i]->setBounds (cx + 4, cy + cellH - 28, 22, 16);
-        macroLinkBtns[i].setBounds (cx + cellW - 26, cy + cellH - 28, 22, 16);
+        macroDragHandles[i]->setBounds (cx + 4, cy + cellH - 28, 20, 16);
+        macroLinkBtns[i].setBounds (cx + cellW - 24, cy + cellH - 28, 20, 16);
     }
 
     int panelLeft = macroStripW + 4;
