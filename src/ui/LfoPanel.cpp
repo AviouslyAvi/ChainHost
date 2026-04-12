@@ -70,6 +70,16 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     smoothKnob.onValueChange = [this]() { proc.getLfoEngine().getLfo (activeLfo).smooth = smoothKnob.getValue(); };
     addAndMakeVisible (smoothKnob);
 
+    delayKnob.setRange (0.0f, 5.0f);
+    delayKnob.setDefaultValue (0.0f);
+    delayKnob.setSuffix (" s");
+    delayKnob.onValueChange = [this]() { proc.getLfoEngine().getLfo (activeLfo).delayTime = delayKnob.getValue(); };
+    addAndMakeVisible (delayKnob);
+
+    phaseKnob.setDefaultValue (0.0f);
+    phaseKnob.onValueChange = [this]() { proc.getLfoEngine().getLfo (activeLfo).startPhase = phaseKnob.getValue(); };
+    addAndMakeVisible (phaseKnob);
+
     auto styleToggle = [] (juce::TextButton& b) {
         b.setColour (juce::TextButton::textColourOffId, Colors::text);
         b.setColour (juce::TextButton::textColourOnId, Colors::text);
@@ -108,6 +118,15 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     };
     addAndMakeVisible (envButton);
 
+    styleToggle (directionButton);
+    directionButton.onClick = [this]() {
+        auto& lfo = proc.getLfoEngine().getLfo (activeLfo);
+        int d = ((int) lfo.direction + 1) % 3;
+        lfo.direction = (LfoEngine::Direction) d;
+        syncControlsToLfo();
+    };
+    addAndMakeVisible (directionButton);
+
     for (int d = 0; d < NumSyncDivs; ++d)
         syncDivBox.addItem (syncDivName ((SyncDiv) d), d + 1);
     syncDivBox.setColour (juce::ComboBox::backgroundColourId, Colors::surfaceRaised);
@@ -119,6 +138,7 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
     addAndMakeVisible (syncDivBox);
 
     waveformEditor.onChanged = [this]() { repaint(); };
+    waveformEditor.isEnvelopeMode = [this]() { return proc.getLfoEngine().getLfo (activeLfo).envelopeMode; };
     addAndMakeVisible (waveformEditor);
 
     auto styleToolBtn = [this] (juce::TextButton& btn, LfoWaveformEditor::Tool tool) {
@@ -127,19 +147,17 @@ LfoPanel::LfoPanel (ChainHostProcessor& p) : proc (p)
         btn.onClick = [this, tool, &btn]() {
             waveformEditor.setTool (tool);
             toolPointer.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
-            toolPencil.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
-            toolEraser.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
-            toolLine.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
-            toolStairs.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolFlat.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolRampUp.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
+            toolRampDown.setColour (juce::TextButton::buttonColourId, Colors::surfaceRaised);
             btn.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
         };
         addAndMakeVisible (btn);
     };
     styleToolBtn (toolPointer, LfoWaveformEditor::PointerTool);
-    styleToolBtn (toolPencil, LfoWaveformEditor::PencilTool);
-    styleToolBtn (toolEraser, LfoWaveformEditor::EraserTool);
-    styleToolBtn (toolLine, LfoWaveformEditor::LineTool);
-    styleToolBtn (toolStairs, LfoWaveformEditor::StairsTool);
+    styleToolBtn (toolFlat, LfoWaveformEditor::FlatTool);
+    styleToolBtn (toolRampUp, LfoWaveformEditor::RampUpTool);
+    styleToolBtn (toolRampDown, LfoWaveformEditor::RampDownTool);
     toolPointer.setColour (juce::TextButton::buttonColourId, Colors::lfoBlue.withAlpha (0.4f));
 
     // Grid size controls
@@ -208,7 +226,7 @@ void LfoPanel::paint (juce::Graphics& g)
     // Knob section box
     int ky = gridRowY + 20;
     g.setColour (Colors::border.withAlpha (0.25f));
-    g.drawRoundedRectangle (6.0f, (float) ky - 4.0f, 244.0f, 66.0f, 3.0f, 1.0f);
+    g.drawRoundedRectangle (6.0f, (float) ky - 4.0f, 274.0f, 66.0f, 3.0f, 1.0f);
 
     // --- Targets section ---
     int targetsX = getWidth() / 2 + 10;
@@ -246,15 +264,15 @@ void LfoPanel::resized()
     retrigButton.setBounds (126, my, 36, 16);
     polarButton.setBounds (166, my, 32, 16);
     envButton.setBounds (202, my, 32, 16);
+    directionButton.setBounds (238, my, 32, 16);
 
     int wfRight = getWidth() / 2 - 10;
     // Tool buttons above waveform
     int toolY = 46;
     toolPointer.setBounds (10, toolY, 30, 14);
-    toolPencil.setBounds (43, toolY, 36, 14);
-    toolEraser.setBounds (82, toolY, 42, 14);
-    toolLine.setBounds (127, toolY, 34, 14);
-    toolStairs.setBounds (164, toolY, 38, 14);
+    toolFlat.setBounds (43, toolY, 36, 14);
+    toolRampUp.setBounds (82, toolY, 24, 14);
+    toolRampDown.setBounds (109, toolY, 24, 14);
     waveformEditor.setBounds (10, toolY + 16, wfRight - 10, 94);
 
     // Grid size controls below waveform
@@ -263,10 +281,13 @@ void LfoPanel::resized()
     gridYBox.setBounds (wfRight - 50, gridY2, 40, 16);
 
     int ky = gridY2 + 20;
-    rateKnob.setBounds (10, ky, 56, 60);
-    depthKnob.setBounds (70, ky, 56, 60);
-    riseKnob.setBounds (130, ky, 56, 60);
-    smoothKnob.setBounds (190, ky, 56, 60);
+    int knobW = 44;
+    rateKnob.setBounds (10, ky, knobW, 60);
+    depthKnob.setBounds (10 + knobW, ky, knobW, 60);
+    delayKnob.setBounds (10 + knobW * 2, ky, knobW, 60);
+    phaseKnob.setBounds (10 + knobW * 3, ky, knobW, 60);
+    riseKnob.setBounds (10 + knobW * 4, ky, knobW, 60);
+    smoothKnob.setBounds (10 + knobW * 5, ky, knobW, 60);
 
     int targetsX = getWidth() / 2 + 10;
     addTargetButton.setBounds (targetsX + 90, 26, 72, 18);
@@ -341,6 +362,23 @@ void LfoPanel::syncControlsToLfo()
     depthKnob.setValue (lfo.depth, false);
     riseKnob.setValue (lfo.riseTime, false);
     smoothKnob.setValue (lfo.smooth, false);
+    delayKnob.setValue (lfo.delayTime, false);
+    phaseKnob.setValue (lfo.startPhase, false);
+
+    // Direction button
+    {
+        static const char* dirLabels[] = { "FWD", "REV", "P.P." };
+        directionButton.setButtonText (dirLabels[(int) lfo.direction]);
+        auto styleActive = [] (juce::TextButton& btn, bool active) {
+            auto bg = active ? Colors::lfoBlue.withAlpha (0.6f) : Colors::surfaceRaised;
+            auto fg = active ? juce::Colours::white : Colors::text;
+            btn.setColour (juce::TextButton::buttonColourId, bg);
+            btn.setColour (juce::TextButton::buttonOnColourId, bg);
+            btn.setColour (juce::TextButton::textColourOffId, fg);
+            btn.setColour (juce::TextButton::textColourOnId, fg);
+        };
+        styleActive (directionButton, lfo.direction != LfoEngine::Forward);
+    }
 
     repaint();
 }
@@ -368,6 +406,8 @@ void LfoPanel::updatePhase()
     depthKnob.setValue (lfo.depth, false);
     riseKnob.setValue (lfo.riseTime, false);
     smoothKnob.setValue (lfo.smooth, false);
+    delayKnob.setValue (lfo.delayTime, false);
+    phaseKnob.setValue (lfo.startPhase, false);
 }
 
 void LfoPanel::setActiveLfo (int index)
@@ -463,10 +503,10 @@ void LfoPanel::showTargetMenu (int lfoIndex)
 void LfoPanel::setupMacroDropHandlers()
 {
     // Map LFO knobs to InternalParams indices for macro drag-drop
-    // Each LFO has 4 params: Rate(0), Depth(1), Rise(2), Smooth(3)
+    // Each LFO has 6 params: Rate(0), Depth(1), Rise(2), Smooth(3), Delay(4), Phase(5)
     auto makeHandler = [this] (int paramOffset) {
         return [this, paramOffset] (int macroIdx) {
-            int internalIdx = activeLfo * 4 + paramOffset;
+            int internalIdx = activeLfo * InternalParams::paramsPerLfo + paramOffset;
             proc.getMacroManager().addMapping (macroIdx, InternalParams::uid, internalIdx, 0.0f, 1.0f);
         };
     };
@@ -474,4 +514,6 @@ void LfoPanel::setupMacroDropHandlers()
     depthKnob.onMacroDropped  = makeHandler (1);
     riseKnob.onMacroDropped   = makeHandler (2);
     smoothKnob.onMacroDropped = makeHandler (3);
+    delayKnob.onMacroDropped  = makeHandler (4);
+    phaseKnob.onMacroDropped  = makeHandler (5);
 }

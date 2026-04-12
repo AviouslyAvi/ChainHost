@@ -20,6 +20,7 @@ struct LfoBreakpoint
     float y = 0.5f;       // 0–1 value
     float curve = 0.0f;   // -1 to +1: curve of segment TO the next point
                           //   0 = linear, >0 = exp (slow start), <0 = log (fast start)
+    bool isLoopback = false;  // envelope mode loops back to this point
 };
 
 //==============================================================================
@@ -52,6 +53,8 @@ public:
     static constexpr float kMinRate = 0.01f;
     static constexpr float kMaxRate = 30.0f;
 
+    enum Direction { Forward = 0, Reverse, PingPong };
+
     struct Lfo
     {
         bool enabled = true;
@@ -73,6 +76,13 @@ public:
         bool unipolar = false;      // 0→1 (true) vs -1→+1 (false)
         bool envelopeMode = false;  // one-shot: play once then hold
         bool envelopeDone = false;
+
+        Direction direction = Forward;
+
+        float delayTime = 0.0f;    // seconds — wait before rise begins
+        float delayPhase = 1.0f;   // 0→1 ramp, starts at 1 when no delay
+
+        float startPhase = 0.0f;   // 0–1 offset applied on retrigger
 
         float riseTime = 0.0f;     // seconds — LFO fades in from zero
         float risePhase = 1.0f;    // 0→1 ramp, starts at 1 when no rise

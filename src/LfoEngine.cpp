@@ -128,7 +128,8 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
         // ── Retrigger on note-on ─────────────────────────────────
         if (hadNoteOn && lfo.retrigger)
         {
-            lfo.phase = 0.0f;
+            lfo.phase = lfo.startPhase;
+            lfo.delayPhase = (lfo.delayTime > 0.0f) ? 0.0f : 1.0f;
             lfo.risePhase = (lfo.riseTime > 0.0f) ? 0.0f : 1.0f;
             lfo.envelopeDone = false;
             lfo.randomNeedsUpdate = true;
@@ -152,22 +153,55 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
             continue;
         }
 
+        // ── Delay period ─────────────────────────────────────────
+        if (lfo.delayTime > 0.0f && lfo.delayPhase < 1.0f)
+        {
+            lfo.delayPhase += (float) (deltaSec / (double) lfo.delayTime);
+            if (lfo.delayPhase >= 1.0f) lfo.delayPhase = 1.0f;
+
+            // During delay, output the leftmost breakpoint value
+            float delayVal = lfo.breakpoints.empty() ? 0.5f : lfo.breakpoints.front().y;
+            lfo.smoothedOutput = delayVal;
+            float output = juce::jlimit (0.0f, 1.0f, delayVal);
+            for (auto& target : lfo.targets)
+            {
+                if (target.type == LfoTarget::Macro)
+                    macros.setMacroValue (target.macroIndex, output, graph, chainGraph, this);
+                else if (auto* node = graph.getNodeForId (target.nodeId))
+                {
+                    auto& params = node->getProcessor()->getParameters();
+                    if (target.paramIndex >= 0 && target.paramIndex < params.size())
+                        params[target.paramIndex]->setValue (output);
+                }
+            }
+            continue;
+        }
+
         // ── Calculate effective rate ─────────────────────────────
         float effectiveRate = lfo.tempoSync
             ? syncDivToHz (lfo.syncDiv, bpm)
             : lfo.rate;
 
         // ── Advance phase ────────────────────────────────────────
-        float prevPhase = lfo.phase;
         lfo.phase += (float) (effectiveRate * deltaSec);
 
         if (lfo.envelopeMode)
         {
-            // One-shot: clamp at 1.0
+            // One-shot: clamp at 1.0, or loop back
             if (lfo.phase >= 1.0f)
             {
-                lfo.phase = 1.0f;
-                lfo.envelopeDone = true;
+                // Check for loopback point
+                float loopbackX = -1.0f;
+                for (auto& bp : lfo.breakpoints)
+                    if (bp.isLoopback) { loopbackX = bp.x; break; }
+
+                if (loopbackX >= 0.0f)
+                    lfo.phase = loopbackX;
+                else
+                {
+                    lfo.phase = 1.0f;
+                    lfo.envelopeDone = true;
+                }
             }
         }
         else
@@ -180,6 +214,13 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
             }
         }
 
+        // ── Apply direction ──────────────────────────────────────
+        float effectivePhase = lfo.phase;
+        if (lfo.direction == Reverse)
+            effectivePhase = 1.0f - lfo.phase;
+        else if (lfo.direction == PingPong)
+            effectivePhase = (lfo.phase < 0.5f) ? (lfo.phase * 2.0f) : (2.0f - lfo.phase * 2.0f);
+
         // ── S&H / S&G random update ─────────────────────────────
         if (lfo.randomNeedsUpdate && (lfo.shape == SampleHold || lfo.shape == SampleGlide))
         {
@@ -191,9 +232,9 @@ void LfoEngine::process (MacroManager& macros, juce::AudioProcessorGraph& graph,
         // ── Compute raw waveform value ───────────────────────────
         float raw;
         if (! lfo.breakpoints.empty())
-            raw = customWaveformAt (lfo.breakpoints, lfo.phase);
+            raw = customWaveformAt (lfo.breakpoints, effectivePhase);
         else
-            raw = waveformAt (lfo.shape, lfo.phase, lfo.lastRandom, lfo.prevRandom);
+            raw = waveformAt (lfo.shape, effectivePhase, lfo.lastRandom, lfo.prevRandom);
 
         // raw is 0–1 (unipolar native)
 
@@ -477,6 +518,9 @@ std::unique_ptr<juce::XmlElement> LfoEngine::toXml() const
         lx->setAttribute ("retrigger",    lfo.retrigger);
         lx->setAttribute ("unipolar",     lfo.unipolar);
         lx->setAttribute ("envelopeMode", lfo.envelopeMode);
+        lx->setAttribute ("direction",    (int) lfo.direction);
+        lx->setAttribute ("delayTime",    (double) lfo.delayTime);
+        lx->setAttribute ("startPhase",   (double) lfo.startPhase);
         lx->setAttribute ("riseTime",     (double) lfo.riseTime);
         lx->setAttribute ("smooth",       (double) lfo.smooth);
         // useCustomShape removed — breakpoints are always used
@@ -491,6 +535,7 @@ std::unique_ptr<juce::XmlElement> LfoEngine::toXml() const
                 pt->setAttribute ("x", (double) bp.x);
                 pt->setAttribute ("y", (double) bp.y);
                 pt->setAttribute ("c", (double) bp.curve);
+                if (bp.isLoopback) pt->setAttribute ("loopback", true);
             }
         }
 
@@ -527,6 +572,9 @@ void LfoEngine::fromXml (const juce::XmlElement& xml)
         lfo.retrigger     = lx->getBoolAttribute   ("retrigger",    true);
         lfo.unipolar      = lx->getBoolAttribute   ("unipolar",     true);
         lfo.envelopeMode  = lx->getBoolAttribute   ("envelopeMode", false);
+        lfo.direction     = (Direction) lx->getIntAttribute ("direction", 0);
+        lfo.delayTime     = (float) lx->getDoubleAttribute ("delayTime", 0.0);
+        lfo.startPhase    = (float) lx->getDoubleAttribute ("startPhase", 0.0);
         lfo.riseTime      = (float) lx->getDoubleAttribute ("riseTime", 0.0);
         lfo.smooth        = (float) lx->getDoubleAttribute ("smooth",   0.0);
         // useCustomShape removed — breakpoints always used (backwards compat: ignored)
@@ -540,6 +588,7 @@ void LfoEngine::fromXml (const juce::XmlElement& xml)
                 bp.x     = (float) pt->getDoubleAttribute ("x", 0.0);
                 bp.y     = (float) pt->getDoubleAttribute ("y", 0.5);
                 bp.curve = (float) pt->getDoubleAttribute ("c", 0.0);
+                bp.isLoopback = pt->getBoolAttribute ("loopback", false);
                 lfo.breakpoints.push_back (bp);
             }
         }

@@ -11,7 +11,7 @@ juce::String InternalParams::paramName (int paramIdx)
     if (paramIdx < 0 || paramIdx >= NumParams) return "?";
     int li = lfoIndex (paramIdx);
     int lp = lfoParam (paramIdx);
-    static const char* names[] = { "Rate", "Depth", "Rise", "Smooth" };
+    static const char* names[] = { "Rate", "Depth", "Rise", "Smooth", "Delay", "Phase" };
     return "LFO " + juce::String (li + 1) + " " + names[lp];
 }
 
@@ -25,6 +25,8 @@ float InternalParams::getParamValue (int paramIdx, const LfoEngine& lfo)
         case 1: return l.depth;
         case 2: return l.riseTime;
         case 3: return l.smooth;
+        case 4: return l.delayTime / 5.0f;
+        case 5: return l.startPhase;
         default: return 0.0f;
     }
 }
@@ -39,6 +41,8 @@ void InternalParams::setParamValue (int paramIdx, float normValue, LfoEngine& lf
         case 1: l.depth = normValue; break;
         case 2: l.riseTime = normValue; break;
         case 3: l.smooth = normValue; break;
+        case 4: l.delayTime = normValue * 5.0f; break;
+        case 5: l.startPhase = normValue; break;
     }
 }
 

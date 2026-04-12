@@ -6,22 +6,23 @@ class LfoEngine;
 
 //==============================================================================
 // Internal ChainHost parameter indices for macro mapping
-// Layout: 4 LFOs × 4 params = 16 total
+// Layout: 4 LFOs × 6 params = 24 total
 namespace InternalParams
 {
     static constexpr const char* uid = "__internal__";
+    static constexpr int paramsPerLfo = 6;
 
     enum Index
     {
-        LFO0_Rate = 0, LFO0_Depth, LFO0_Rise, LFO0_Smooth,
-        LFO1_Rate,     LFO1_Depth, LFO1_Rise, LFO1_Smooth,
-        LFO2_Rate,     LFO2_Depth, LFO2_Rise, LFO2_Smooth,
-        LFO3_Rate,     LFO3_Depth, LFO3_Rise, LFO3_Smooth,
+        LFO0_Rate = 0, LFO0_Depth, LFO0_Rise, LFO0_Smooth, LFO0_Delay, LFO0_Phase,
+        LFO1_Rate,     LFO1_Depth, LFO1_Rise, LFO1_Smooth, LFO1_Delay, LFO1_Phase,
+        LFO2_Rate,     LFO2_Depth, LFO2_Rise, LFO2_Smooth, LFO2_Delay, LFO2_Phase,
+        LFO3_Rate,     LFO3_Depth, LFO3_Rise, LFO3_Smooth, LFO3_Delay, LFO3_Phase,
         NumParams
     };
 
-    inline int lfoIndex (int paramIdx) { return paramIdx / 4; }
-    inline int lfoParam (int paramIdx) { return paramIdx % 4; } // 0=rate,1=depth,2=rise,3=smooth
+    inline int lfoIndex (int paramIdx) { return paramIdx / paramsPerLfo; }
+    inline int lfoParam (int paramIdx) { return paramIdx % paramsPerLfo; } // 0=rate,1=depth,2=rise,3=smooth,4=delay,5=phase
 
     juce::String paramName (int paramIdx);
     float getParamValue (int paramIdx, const LfoEngine& lfo);

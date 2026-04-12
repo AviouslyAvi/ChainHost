@@ -26,6 +26,7 @@ private:
     juce::TextButton enableButton { "OFF" };
     juce::ComboBox shapeBox;
     FabKnob rateKnob { "Rate", Colors::lfoBlue }, depthKnob { "Depth", Colors::lfoBlue };
+    FabKnob delayKnob { "Delay", Colors::lfoBlue }, phaseKnob { "Phase", Colors::lfoBlue };
     FabKnob riseKnob { "Rise", Colors::lfoBlue }, smoothKnob { "Smooth", Colors::lfoBlue };
 
     juce::TextButton syncButton { "FREE" };
@@ -36,8 +37,10 @@ private:
     juce::ComboBox syncDivBox;
 
     LfoWaveformEditor waveformEditor;
-    juce::TextButton toolPointer { "PTR" }, toolPencil { "STEP" }, toolEraser { "ERASE" },
-                     toolLine { "LINE" }, toolStairs { "STAIR" };
+    juce::TextButton toolPointer { "PTR" }, toolFlat { "FLAT" },
+                     toolRampUp { juce::CharPointer_UTF8 ("\xe2\x86\x97") },
+                     toolRampDown { juce::CharPointer_UTF8 ("\xe2\x86\x98") };
+    juce::TextButton directionButton { "FWD" };
 
     juce::ComboBox gridXBox, gridYBox;
 

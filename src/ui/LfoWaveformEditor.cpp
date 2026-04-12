@@ -148,10 +148,20 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
             else
                 g.setColour (Colors::lfoBlue);
 
-            float radius = isSelected ? 5.0f : 4.0f;
+            bool isLoopback = (*breakpoints)[(size_t) i].isLoopback;
+            float radius = isSelected ? 5.0f : (isLoopback ? 5.5f : 4.0f);
             g.fillEllipse (pt.x - radius, pt.y - radius, radius * 2.0f, radius * 2.0f);
-            g.setColour (Colors::text);
-            g.drawEllipse (pt.x - radius, pt.y - radius, radius * 2.0f, radius * 2.0f, 1.0f);
+            g.setColour (isLoopback ? Colors::accent : Colors::text);
+            g.drawEllipse (pt.x - radius, pt.y - radius, radius * 2.0f, radius * 2.0f, isLoopback ? 1.5f : 1.0f);
+
+            // Loopback arrow indicator
+            if (isLoopback)
+            {
+                g.setColour (Colors::accent);
+                g.drawLine (pt.x, b.getY(), pt.x, b.getBottom(), 1.0f);
+                g.setFont (juce::Font (juce::FontOptions (8.0f)));
+                g.drawText (juce::CharPointer_UTF8 ("\xe2\x86\xa9"), (int)(pt.x - 6), (int)b.getY() + 2, 12, 10, juce::Justification::centred);
+            }
         }
 
         // Tension handles — small circles at midpoint of each segment on the waveform
@@ -195,17 +205,6 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
         g.fillEllipse (px - 3.5f, py - 3.5f, 7.0f, 7.0f);
     }
 
-    // Line/Stairs tool start indicator
-    if (lineStartSet && (currentTool == LineTool || currentTool == StairsTool))
-    {
-        float sx = b.getX() + lineStartX * w;
-        float sy = b.getY() + (1.0f - lineStartY) * h;
-        g.setColour (Colors::accent);
-        g.fillEllipse (sx - 5.0f, sy - 5.0f, 10.0f, 10.0f);
-        g.setColour (Colors::text);
-        g.drawEllipse (sx - 5.0f, sy - 5.0f, 10.0f, 10.0f, 1.0f);
-    }
-
     g.setColour (Colors::border.withAlpha (0.5f));
     g.drawRect (b, 1.0f);
 }
@@ -217,126 +216,54 @@ void LfoWaveformEditor::mouseDown (const juce::MouseEvent& e)
     float mx = (float) e.x, my = (float) e.y;
     bool snapEnabled = ! e.mods.isAltDown();
 
-    // Eraser tool: remove point under cursor
-    if (currentTool == EraserTool)
-    {
-        int idx = hitTestBreakpoint (mx, my, b.getWidth(), b.getHeight());
-        if (idx >= 0 && (int) breakpoints->size() > 2)
-        {
-            pushUndo();
-            breakpoints->erase (breakpoints->begin() + idx);
-            if (onChanged) onChanged();
-            repaint();
-        }
-        isDrawing = true;
-        return;
-    }
-
-    // Pencil tool: step draw (or freehand with Alt)
-    if (currentTool == PencilTool)
+    // Flat / RampUp / RampDown tools: draw grid-snapped segments
+    if (currentTool == FlatTool || currentTool == RampUpTool || currentTool == RampDownTool)
     {
         pushUndo();
         isDrawing = true;
         float nx = juce::jlimit (0.0f, 1.0f, (mx - b.getX()) / b.getWidth());
         float ny = juce::jlimit (0.0f, 1.0f, 1.0f - (my - b.getY()) / b.getHeight());
+        ny = snapToGrid (ny, gridY, true);
 
-        if (! e.mods.isAltDown())
-        {
-            // Step draw: snap to grid column, place flat step
-            nx = snapToGrid (nx, gridX, true);
-            ny = snapToGrid (ny, gridY, true);
-        }
+        float colW = 1.0f / (float) gridX;
+        float x0 = std::floor (nx / colW) * colW;
+        float x1 = x0 + colW;
+        x0 = juce::jlimit (0.0f, 1.0f, x0);
+        x1 = juce::jlimit (0.0f, 1.0f, x1);
 
-        // Add or move existing point at this x
-        bool found = false;
-        for (auto& bp : *breakpoints)
-        {
-            if (std::abs (bp.x - nx) < 0.5f / (float) gridX)
-            {
-                bp.y = ny;
-                found = true;
-                break;
-            }
-        }
-        if (! found)
-        {
-            LfoBreakpoint newBp { nx, ny, 0.0f };
-            auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), newBp,
-                [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
-            breakpoints->insert (it, newBp);
-        }
-        if (onChanged) onChanged();
-        repaint();
-        return;
-    }
-
-    // Line / Stairs tool: click to set start, click again to draw
-    if (currentTool == LineTool || currentTool == StairsTool)
-    {
-        float nx = juce::jlimit (0.0f, 1.0f, (mx - b.getX()) / b.getWidth());
-        float ny = juce::jlimit (0.0f, 1.0f, 1.0f - (my - b.getY()) / b.getHeight());
-        nx = snapToGrid (nx, gridX, snapEnabled);
-        ny = snapToGrid (ny, gridY, snapEnabled);
-
-        if (! lineStartSet)
-        {
-            lineStartX = nx;
-            lineStartY = ny;
-            lineStartSet = true;
-            repaint();
-            return;
-        }
-
-        // Second click: draw line or stairs from start to here
-        pushUndo();
-        float x0 = std::min (lineStartX, nx);
-        float x1 = std::max (lineStartX, nx);
-        float y0 = (lineStartX <= nx) ? lineStartY : ny;
-        float y1 = (lineStartX <= nx) ? ny : lineStartY;
-
-        // Remove existing breakpoints in the range [x0, x1]
+        // Remove existing points in [x0, x1]
         breakpoints->erase (
             std::remove_if (breakpoints->begin(), breakpoints->end(),
                 [x0, x1] (const LfoBreakpoint& bp) { return bp.x >= x0 && bp.x <= x1; }),
             breakpoints->end());
 
-        int numSteps = juce::jmax (2, (int) std::round ((x1 - x0) * (float) gridX) + 1);
+        auto insertBp = [&] (float px, float py) {
+            LfoBreakpoint bp { px, py, 0.0f };
+            auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), bp,
+                [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
+            breakpoints->insert (it, bp);
+        };
 
-        if (currentTool == LineTool)
+        if (currentTool == FlatTool)
         {
-            // Insert evenly spaced points along the line
-            for (int s = 0; s < numSteps; ++s)
-            {
-                float t = (numSteps == 1) ? 0.0f : (float) s / (float) (numSteps - 1);
-                float px = x0 + t * (x1 - x0);
-                float py = y0 + t * (y1 - y0);
-                px = snapToGrid (px, gridX, snapEnabled);
-                py = snapToGrid (py, gridY, snapEnabled);
-                LfoBreakpoint bp { px, py, 0.0f };
-                auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), bp,
-                    [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
-                breakpoints->insert (it, bp);
-            }
+            insertBp (x0, ny);
+            insertBp (x1, ny);
         }
-        else // StairsTool
+        else if (currentTool == RampUpTool)
         {
-            // Insert horizontal steps
-            for (int s = 0; s < numSteps; ++s)
-            {
-                float t = (numSteps == 1) ? 0.0f : (float) s / (float) (numSteps - 1);
-                float px = x0 + t * (x1 - x0);
-                // Step: y stays at the level of the previous step (quantised)
-                float py = y0 + std::floor (t * (float) gridY) / (float) gridY * (y1 - y0);
-                px = snapToGrid (px, gridX, snapEnabled);
-                py = snapToGrid (py, gridY, snapEnabled);
-                LfoBreakpoint bp { px, py, 0.0f };
-                auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), bp,
-                    [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
-                breakpoints->insert (it, bp);
-            }
+            float yBottom = snapToGrid (0.0f, gridY, true);
+            float yTop = snapToGrid (1.0f, gridY, true);
+            insertBp (x0, yBottom);
+            insertBp (x1, yTop);
+        }
+        else // RampDownTool
+        {
+            float yTop = snapToGrid (1.0f, gridY, true);
+            float yBottom = snapToGrid (0.0f, gridY, true);
+            insertBp (x0, yTop);
+            insertBp (x1, yBottom);
         }
 
-        lineStartSet = false;
         if (onChanged) onChanged();
         repaint();
         return;
@@ -351,56 +278,86 @@ void LfoWaveformEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    // Right-click: delete selected points (or single clicked point), min 2 remaining
+    // Right-click: context menu
     if (e.mods.isPopupMenu())
     {
-        int idx = hitTestBreakpoint (mx, my, b.getWidth(), b.getHeight());
+        float w = b.getWidth(), h = b.getHeight();
+        int hitIdx = hitTestBreakpoint (mx, my, w, h);
+        int curveIdx = hitTestCurveHandle (mx, my, w, h);
 
-        // If we right-clicked a selected point, delete all selected
-        if (idx >= 0 && selectedIndices.count (idx) > 0 && ! selectedIndices.empty())
+        juce::PopupMenu menu;
+
+        if (hitIdx >= 0 && selectedIndices.count (hitIdx) > 0 && ! selectedIndices.empty())
+            menu.addItem (1, "Remove Selected Points", (int) breakpoints->size() - (int) selectedIndices.size() >= 2);
+        else if (hitIdx >= 0)
+            menu.addItem (2, "Remove Point", (int) breakpoints->size() > 2);
+
+        if (hitIdx >= 0 && isEnvelopeMode && isEnvelopeMode())
         {
-            pushUndo();
-            std::vector<int> toDelete (selectedIndices.begin(), selectedIndices.end());
-            std::sort (toDelete.rbegin(), toDelete.rend());
-            for (int di : toDelete)
-            {
-                if ((int) breakpoints->size() <= 2) break;
-                breakpoints->erase (breakpoints->begin() + di);
-            }
-            selectedIndices.clear();
-            if (onChanged) onChanged();
-            repaint();
+            menu.addSeparator();
+            bool alreadyLoop = (*breakpoints)[(size_t) hitIdx].isLoopback;
+            menu.addItem (3, alreadyLoop ? "Clear Loopback Point" : "Set Loopback Point Here");
         }
-        else if (idx >= 0 && (int) breakpoints->size() > 2)
+
+        if (curveIdx >= 0)
         {
-            pushUndo();
-            breakpoints->erase (breakpoints->begin() + idx);
-            selectedIndices.clear();
-            if (onChanged) onChanged();
-            repaint();
+            menu.addSeparator();
+            menu.addItem (4, "Reset Curve to Linear");
+            menu.addItem (5, "Reset All Curves");
         }
-        else
-        {
-            // Right-click on tension handle: reset curve to linear
-            float w = b.getWidth(), h = b.getHeight();
-            for (int i = 0; i < (int) breakpoints->size() - 1; ++i)
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (
+            { (int) mx + getScreenX(), (int) my + getScreenY(), 1, 1 }),
+            [this, hitIdx, curveIdx] (int result)
             {
-                auto& bp0 = (*breakpoints)[(size_t) i];
-                auto& bp1 = (*breakpoints)[(size_t) i + 1];
-                float midPhase = (bp0.x + bp1.x) * 0.5f;
-                float midVal = LfoEngine::customWaveformAt (*breakpoints, midPhase);
-                float cx2 = b.getX() + midPhase * w;
-                float cy2 = b.getY() + (1.0f - midVal) * h;
-                if (std::abs (mx - cx2) < 8.0f && std::abs (my - cy2) < 8.0f)
+                if (result == 1) // Remove selected
                 {
                     pushUndo();
-                    bp0.curve = 0.0f;
+                    std::vector<int> toDelete (selectedIndices.begin(), selectedIndices.end());
+                    std::sort (toDelete.rbegin(), toDelete.rend());
+                    for (int di : toDelete)
+                    {
+                        if ((int) breakpoints->size() <= 2) break;
+                        breakpoints->erase (breakpoints->begin() + di);
+                    }
+                    selectedIndices.clear();
                     if (onChanged) onChanged();
                     repaint();
-                    break;
                 }
-            }
-        }
+                else if (result == 2) // Remove single point
+                {
+                    pushUndo();
+                    if (hitIdx >= 0 && hitIdx < (int) breakpoints->size() && (int) breakpoints->size() > 2)
+                        breakpoints->erase (breakpoints->begin() + hitIdx);
+                    selectedIndices.clear();
+                    if (onChanged) onChanged();
+                    repaint();
+                }
+                else if (result == 3) // Toggle loopback
+                {
+                    pushUndo();
+                    bool wasLoop = (*breakpoints)[(size_t) hitIdx].isLoopback;
+                    for (auto& bp : *breakpoints) bp.isLoopback = false;
+                    if (! wasLoop) (*breakpoints)[(size_t) hitIdx].isLoopback = true;
+                    if (onChanged) onChanged();
+                    repaint();
+                }
+                else if (result == 4) // Reset single curve
+                {
+                    pushUndo();
+                    if (curveIdx >= 0 && curveIdx < (int) breakpoints->size())
+                        (*breakpoints)[(size_t) curveIdx].curve = 0.0f;
+                    if (onChanged) onChanged();
+                    repaint();
+                }
+                else if (result == 5) // Reset all curves
+                {
+                    pushUndo();
+                    for (auto& bp : *breakpoints) bp.curve = 0.0f;
+                    if (onChanged) onChanged();
+                    repaint();
+                }
+            });
         return;
     }
 
@@ -472,48 +429,35 @@ void LfoWaveformEditor::mouseDrag (const juce::MouseEvent& e)
     float mx = (float) e.x, my = (float) e.y;
     bool snapEnabled = ! e.mods.isAltDown();
 
-    // Eraser drag: keep removing points under cursor
-    if (isDrawing && currentTool == EraserTool)
-    {
-        int idx = hitTestBreakpoint (mx, my, b.getWidth(), b.getHeight());
-        if (idx >= 0 && (int) breakpoints->size() > 2)
-        {
-            breakpoints->erase (breakpoints->begin() + idx);
-            if (onChanged) onChanged();
-            repaint();
-        }
-        return;
-    }
-
-    // Pencil drag: continuous drawing
-    if (isDrawing && currentTool == PencilTool)
+    // Drawing tool drag: paint segments as mouse moves
+    if (isDrawing && (currentTool == FlatTool || currentTool == RampUpTool || currentTool == RampDownTool))
     {
         float nx = juce::jlimit (0.0f, 1.0f, (mx - b.getX()) / b.getWidth());
         float ny = juce::jlimit (0.0f, 1.0f, 1.0f - (my - b.getY()) / b.getHeight());
+        ny = snapToGrid (ny, gridY, true);
 
-        if (! e.mods.isAltDown())
-        {
-            nx = snapToGrid (nx, gridX, true);
-            ny = snapToGrid (ny, gridY, true);
-        }
+        float colW = 1.0f / (float) gridX;
+        float x0 = std::floor (nx / colW) * colW;
+        float x1 = x0 + colW;
+        x0 = juce::jlimit (0.0f, 1.0f, x0);
+        x1 = juce::jlimit (0.0f, 1.0f, x1);
 
-        bool found = false;
-        for (auto& bp : *breakpoints)
-        {
-            if (std::abs (bp.x - nx) < 0.5f / (float) gridX)
-            {
-                bp.y = ny;
-                found = true;
-                break;
-            }
-        }
-        if (! found)
-        {
-            LfoBreakpoint newBp { nx, ny, 0.0f };
-            auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), newBp,
+        breakpoints->erase (
+            std::remove_if (breakpoints->begin(), breakpoints->end(),
+                [x0, x1] (const LfoBreakpoint& bp) { return bp.x >= x0 && bp.x <= x1; }),
+            breakpoints->end());
+
+        auto insertBp = [&] (float px, float py) {
+            LfoBreakpoint bp { px, py, 0.0f };
+            auto it = std::lower_bound (breakpoints->begin(), breakpoints->end(), bp,
                 [] (const LfoBreakpoint& a, const LfoBreakpoint& rhs) { return a.x < rhs.x; });
-            breakpoints->insert (it, newBp);
-        }
+            breakpoints->insert (it, bp);
+        };
+
+        if (currentTool == FlatTool)          { insertBp (x0, ny); insertBp (x1, ny); }
+        else if (currentTool == RampUpTool)   { insertBp (x0, 0.0f); insertBp (x1, 1.0f); }
+        else                                  { insertBp (x0, 1.0f); insertBp (x1, 0.0f); }
+
         if (onChanged) onChanged();
         repaint();
         return;
@@ -555,7 +499,17 @@ void LfoWaveformEditor::mouseDrag (const juce::MouseEvent& e)
         // Flip sign based on segment direction so dragging feels consistent
         if (p1.y < p0.y) deviation = -deviation;
 
-        p0.curve = juce::jlimit (-1.0f, 1.0f, deviation);
+        float newCurve = juce::jlimit (-1.0f, 1.0f, deviation);
+        if (e.mods.isAltDown())
+        {
+            // Alt-drag: apply to ALL curves
+            for (int i = 0; i < (int) breakpoints->size() - 1; ++i)
+                (*breakpoints)[(size_t) i].curve = newCurve;
+        }
+        else
+        {
+            p0.curve = newCurve;
+        }
         if (onChanged) onChanged();
         repaint();
         return;
@@ -631,4 +585,22 @@ void LfoWaveformEditor::mouseUp (const juce::MouseEvent&)
     draggingSelection = false;
     movingSelected = false;
     isDrawing = false;
+}
+
+int LfoWaveformEditor::hitTestCurveHandle (float mx, float my, float w, float h) const
+{
+    if (! breakpoints) return -1;
+    auto b = getLocalBounds().toFloat();
+    for (int i = 0; i < (int) breakpoints->size() - 1; ++i)
+    {
+        auto& bp0 = (*breakpoints)[(size_t) i];
+        auto& bp1 = (*breakpoints)[(size_t) i + 1];
+        float midPhase = (bp0.x + bp1.x) * 0.5f;
+        float midVal = LfoEngine::customWaveformAt (*breakpoints, midPhase);
+        float cx = b.getX() + midPhase * w;
+        float cy = b.getY() + (1.0f - midVal) * h;
+        if (std::abs (mx - cx) < 8.0f && std::abs (my - cy) < 8.0f)
+            return i;
+    }
+    return -1;
 }

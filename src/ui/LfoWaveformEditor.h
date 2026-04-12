@@ -22,10 +22,12 @@ public:
     void setEnabled (bool e) { lfoEnabled = e; }
     std::function<void()> onChanged;
 
-    enum Tool { PointerTool, PencilTool, EraserTool, LineTool, StairsTool };
+    enum Tool { PointerTool, FlatTool, RampUpTool, RampDownTool };
     Tool currentTool = PointerTool;
-    void setTool (Tool t) { currentTool = t; lineStartSet = false; repaint(); }
+    void setTool (Tool t) { currentTool = t; repaint(); }
     Tool getTool() const { return currentTool; }
+
+    std::function<bool()> isEnvelopeMode;
 
     int gridX = 16;
     int gridY = 8;
@@ -52,9 +54,7 @@ private:
     // Drawing
     bool isDrawing = false;
 
-    // Line / Stairs tool
-    bool lineStartSet = false;
-    float lineStartX = 0.0f, lineStartY = 0.0f;
+    int hitTestCurveHandle (float mx, float my, float w, float h) const;
 
     // Undo
     std::vector<std::vector<LfoBreakpoint>> undoStack;
