@@ -780,27 +780,19 @@ void LfoPanel::checkLfoLearn()
 {
     if (! lfoLearning) return;
 
-    // Build a set of parameters already modulated by any LFO or macro so we skip them
+    // Rolling snapshot approach: compare current values to the previous tick's
+    // values. LFO/macro modulation changes params smoothly by small amounts
+    // each tick (~16ms), while user interaction creates large sudden jumps.
+    // Threshold of 0.08 per tick reliably distinguishes the two.
+    static constexpr float kLearnThreshold = 0.08f;
+
     auto& lfoEngine = proc.getLfoEngine();
-    std::set<std::pair<juce::uint32, int>> alreadyModulated;
-
-    // LFO direct targets
-    for (int li = 0; li < LfoEngine::numLfos; ++li)
-        for (auto& tgt : lfoEngine.getLfo (li).targets)
-            if (tgt.type == LfoTarget::Parameter)
-                alreadyModulated.insert ({ tgt.nodeId.uid, tgt.paramIndex });
-
-    // Macro-mapped params (macros continuously set their values via setValue)
-    auto& mm = proc.getMacroManager();
-    for (int mi = 0; mi < MacroManager::numMacros; ++mi)
-        for (auto& m : mm.getMappings (mi))
-        {
-            if (m.slotUid == InternalParams::uid) continue;
-            auto nid = proc.getChainGraph().getNodeIdForUid (m.slotUid);
-            alreadyModulated.insert ({ nid.uid, m.paramIndex });
-        }
-
     auto& cg = proc.getChainGraph();
+
+    juce::AudioProcessorGraph::NodeID bestNode {};
+    int bestParam = -1;
+    float bestDelta = 0.0f;
+
     for (int ci = 0; ci < cg.getNumChains(); ++ci)
         for (auto& slot : cg.getChain (ci).slots)
         {
@@ -811,25 +803,31 @@ void LfoPanel::checkLfoLearn()
                 auto& params = node->getProcessor()->getParameters();
                 for (int pi = 0; pi < params.size() && pi < (int) it->second.size(); ++pi)
                 {
-                    // Skip params already modulated by an LFO — their values
-                    // change every tick and would cause false detections
-                    if (alreadyModulated.count ({ slot.nodeId.uid, pi }))
-                        continue;
+                    float prevVal = it->second[(size_t) pi];
+                    float curVal = params[pi]->getValue();
+                    float delta = std::abs (curVal - prevVal);
 
-                    float oldVal = it->second[(size_t) pi];
-                    float newVal = params[pi]->getValue();
-                    if (std::abs (newVal - oldVal) > 0.01f)
+                    // Always update the snapshot to track the rolling baseline
+                    it->second[(size_t) pi] = curVal;
+
+                    if (delta > bestDelta)
                     {
-                        LfoTarget t;
-                        t.type = LfoTarget::Parameter;
-                        t.nodeId = slot.nodeId;
-                        t.paramIndex = pi;
-                        lfoEngine.addTarget (activeLfo, t);
-                        stopLfoLearn();
-                        refresh();
-                        return;
+                        bestDelta = delta;
+                        bestNode = slot.nodeId;
+                        bestParam = pi;
                     }
                 }
             }
         }
+
+    if (bestDelta > kLearnThreshold && bestParam >= 0)
+    {
+        LfoTarget t;
+        t.type = LfoTarget::Parameter;
+        t.nodeId = bestNode;
+        t.paramIndex = bestParam;
+        lfoEngine.addTarget (activeLfo, t);
+        stopLfoLearn();
+        refresh();
+    }
 }

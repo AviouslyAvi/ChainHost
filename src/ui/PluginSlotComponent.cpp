@@ -91,12 +91,19 @@ void PluginSlotComponent::resized()
 
 void PluginSlotComponent::mouseDown (const juce::MouseEvent& e)
 {
-    // Store for drag detection
     dragStartPos = e.getPosition();
 }
 
 void PluginSlotComponent::mouseDrag (const juce::MouseEvent& e)
 {
+    // Only allow drag from the main body — not over the ON button, remove, or D/W knob
+    bool inBypass = bypassButton.getBounds().contains (dragStartPos);
+    bool inRemove = removeButton.getBounds().contains (dragStartPos);
+    bool inDryWet = dryWetKnob.getBounds().contains (dragStartPos);
+
+    if (inBypass || inRemove || inDryWet)
+        return;
+
     if (e.getDistanceFromDragStart() > 6)
     {
         if (auto* dc = juce::DragAndDropContainer::findParentDragContainerFor (this))
