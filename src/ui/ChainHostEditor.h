@@ -51,13 +51,18 @@ private:
         ChainContainer (ChainHostProcessor& p) : proc (p) {}
         void paint (juce::Graphics& g) override;
         void resized() override;
-        void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override;
         juce::OwnedArray<ChainViewRow> chainRows;
     private:
         ChainHostProcessor& proc;
     };
 
-    juce::Viewport chainViewport;
+    // Viewport subclass to handle shift+scroll / trackpad horizontal scrolling
+    class ChainViewport : public juce::Viewport {
+    public:
+        void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override;
+    };
+
+    ChainViewport chainViewport;
     ChainContainer chainContainer;
 
     int scrollIdleCounter = 0;

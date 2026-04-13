@@ -143,6 +143,36 @@ void ChainGraph::movePlugin (juce::AudioProcessorGraph& graph,
     rebuildConnections (graph);
 }
 
+juce::AudioProcessorGraph::NodeID ChainGraph::duplicatePlugin (
+    juce::AudioProcessorGraph& graph, PluginScanner& scanner,
+    int fromChain, int fromSlot, int toChain, int toSlot)
+{
+    if (fromChain < 0 || fromChain >= (int) chains.size()) return {};
+    if (fromSlot < 0 || fromSlot >= (int) chains[(size_t) fromChain].slots.size()) return {};
+    if (toChain < 0 || toChain >= (int) chains.size()) return {};
+
+    auto& srcSlot = chains[(size_t) fromChain].slots[(size_t) fromSlot];
+    auto* srcNode = graph.getNodeForId (srcSlot.nodeId);
+    if (! srcNode) return {};
+
+    auto* srcProc = dynamic_cast<juce::AudioPluginInstance*> (srcNode->getProcessor());
+    if (! srcProc) return {};
+
+    // Save the source plugin's state
+    juce::MemoryBlock stateData;
+    srcProc->getStateInformation (stateData);
+
+    // Create a new instance of the same plugin
+    auto newNodeId = addPlugin (graph, scanner, srcProc->getPluginDescription(), toChain, toSlot);
+    if (newNodeId == juce::AudioProcessorGraph::NodeID {}) return {};
+
+    // Restore the state into the new instance
+    if (auto* newNode = graph.getNodeForId (newNodeId))
+        newNode->getProcessor()->setStateInformation (stateData.getData(), (int) stateData.getSize());
+
+    return newNodeId;
+}
+
 int ChainGraph::addParallelChain (juce::AudioProcessorGraph& graph)
 {
     ParallelChain chain;

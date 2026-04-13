@@ -357,19 +357,20 @@ void LfoPanel::resized()
     riseKnob.setBounds (knobStartX + knobW * 4, ky, knobW, knobH);
     smoothKnob.setBounds (knobStartX + knobW * 5, ky, knobW, knobH);
 
-    // Targets column (narrow right side)
+    // Targets column (narrow right side) — buttons sized to match toolbar
     int tBtnX = targetsX;
-    addTargetButton.setBounds (tBtnX, 22, 48, 16);
-    lfoDragHandle.setBounds (tBtnX + 52, 22, 22, 16);
-    lfoLinkBtn.setBounds (tBtnX + 78, 22, 22, 16);
-    lfoLearnBtn.setBounds (tBtnX + 104, 22, 44, 16);
+    int tBtnH = 22;
+    addTargetButton.setBounds (tBtnX, 22, 52, tBtnH);
+    lfoDragHandle.setBounds (tBtnX + 56, 22, 26, tBtnH);
+    lfoLinkBtn.setBounds (tBtnX + 86, 22, 26, tBtnH);
+    lfoLearnBtn.setBounds (tBtnX + 116, 22, 52, tBtnH);
 
-    int ty = 42;
+    int ty = 48;
     for (auto* tr : targetRows)
     {
-        tr->label.setBounds (targetsX, ty, targetsW - 30, 16);
-        tr->removeButton.setBounds (targetsX + targetsW - 24, ty, 16, 16);
-        ty += 19;
+        tr->label.setBounds (targetsX, ty, targetsW - 30, 20);
+        tr->removeButton.setBounds (targetsX + targetsW - 24, ty, 20, 20);
+        ty += 24;
     }
 }
 

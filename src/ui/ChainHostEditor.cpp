@@ -182,7 +182,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     addAndMakeVisible (lfoPanel);
 
     chainViewport.setViewedComponent (&chainContainer, false);
-    chainViewport.setScrollBarsShown (true, true, true, true);
+    chainViewport.setScrollBarsShown (true, false, true, true);
     addAndMakeVisible (chainViewport);
 
     refreshChainView(); refreshMacroLabels();
@@ -288,24 +288,26 @@ void ChainHostEditor::ChainContainer::resized()
     }
 }
 
-void ChainHostEditor::ChainContainer::mouseWheelMove (const juce::MouseEvent& e,
-                                                       const juce::MouseWheelDetails& wheel)
+void ChainHostEditor::ChainViewport::mouseWheelMove (const juce::MouseEvent& e,
+                                                      const juce::MouseWheelDetails& wheel)
 {
-    if (auto* vp = findParentComponentOfClass<juce::Viewport>())
+    // Shift+scroll or native horizontal trackpad gesture → horizontal scroll
+    bool wantsHorizontal = e.mods.isShiftDown()
+                        || (std::abs (wheel.deltaX) > std::abs (wheel.deltaY));
+
+    if (wantsHorizontal && getViewedComponent() != nullptr)
     {
-        if (e.mods.isShiftDown())
-        {
-            // Shift+scroll → horizontal scroll
-            auto pos = vp->getViewPosition();
-            int delta = juce::roundToInt (wheel.deltaY * 300.0f);
-            pos.x = juce::jlimit (0, juce::jmax (0, getWidth() - vp->getWidth()), pos.x - delta);
-            vp->setViewPosition (pos);
-        }
-        else
-        {
-            // Normal scroll → vertical
-            Component::mouseWheelMove (e, wheel);
-        }
+        float dx = (std::abs (wheel.deltaX) > std::abs (wheel.deltaY)) ? wheel.deltaX : wheel.deltaY;
+        auto pos = getViewPosition();
+        int contentW = getViewedComponent()->getWidth();
+        int delta = juce::roundToInt (dx * 300.0f);
+        pos.x = juce::jlimit (0, juce::jmax (0, contentW - getWidth()), pos.x - delta);
+        setViewPosition (pos);
+    }
+    else
+    {
+        // Normal vertical scroll — let Viewport handle it
+        juce::Viewport::mouseWheelMove (e, wheel);
     }
 }
 
@@ -490,6 +492,7 @@ void ChainHostEditor::refreshChainView()
                 refreshChainView(); mappingPanel.refresh(); lfoPanel.refresh(); refreshMacroLabels();
             };
             comp->onMove = [this] (int fc, int fs, int tc, int ts) { proc.getChainGraph().movePlugin (proc.getGraph(), fc, fs, tc, ts); refreshChainView(); };
+            comp->onCopy = [this] (int fc, int fs, int tc, int ts) { proc.getChainGraph().duplicatePlugin (proc.getGraph(), proc.getScanner(), fc, fs, tc, ts); refreshChainView(); };
             chainContainer.addAndMakeVisible (comp);
         }
     }

@@ -234,6 +234,11 @@ public:
     void movePlugin (juce::AudioProcessorGraph& graph,
                      int fromChain, int fromSlot, int toChain, int toSlot);
 
+    juce::AudioProcessorGraph::NodeID duplicatePlugin (
+        juce::AudioProcessorGraph& graph,
+        PluginScanner& scanner,
+        int fromChain, int fromSlot, int toChain, int toSlot);
+
     int addParallelChain (juce::AudioProcessorGraph& graph);
     void removeParallelChain (juce::AudioProcessorGraph& graph, int chainIndex);
     void setChainVolume (juce::AudioProcessorGraph& graph, int chainIndex, float volume);

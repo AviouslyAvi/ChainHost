@@ -24,6 +24,7 @@ public:
 
     std::function<void (juce::AudioProcessorGraph::NodeID)> onOpenEditor, onRemove;
     std::function<void (int, int, int, int)> onMove;
+    std::function<void (int, int, int, int)> onCopy; // alt-drag: copy from (chain,slot) to (chain,slot)
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
 
 private:

@@ -93,7 +93,11 @@ void PluginSlotComponent::mouseDown (const juce::MouseEvent& e)
 {
     if (e.x < 22 && e.y > 24)
         if (auto* dc = juce::DragAndDropContainer::findParentDragContainerFor (this))
-            dc->startDragging (juce::var (juce::String (chainIndex) + ":" + juce::String (slotIndex)), this);
+        {
+            // Alt/Option held → copy; otherwise move
+            juce::String prefix = e.mods.isAltDown() ? "copy:" : "";
+            dc->startDragging (juce::var (prefix + juce::String (chainIndex) + ":" + juce::String (slotIndex)), this);
+        }
 }
 
 void PluginSlotComponent::mouseDoubleClick (const juce::MouseEvent&)
@@ -104,7 +108,17 @@ void PluginSlotComponent::mouseDoubleClick (const juce::MouseEvent&)
 void PluginSlotComponent::itemDropped (const SourceDetails& details)
 {
     dragHover = false; repaint();
-    auto parts = juce::StringArray::fromTokens (details.description.toString(), ":", "");
-    if (parts.size() == 2 && onMove)
-        onMove (parts[0].getIntValue(), parts[1].getIntValue(), chainIndex, slotIndex);
+    auto desc = details.description.toString();
+    bool isCopy = desc.startsWith ("copy:");
+    if (isCopy) desc = desc.fromFirstOccurrenceOf ("copy:", false, false);
+
+    auto parts = juce::StringArray::fromTokens (desc, ":", "");
+    if (parts.size() == 2)
+    {
+        int fc = parts[0].getIntValue(), fs = parts[1].getIntValue();
+        if (isCopy && onCopy)
+            onCopy (fc, fs, chainIndex, slotIndex);
+        else if (! isCopy && onMove)
+            onMove (fc, fs, chainIndex, slotIndex);
+    }
 }
