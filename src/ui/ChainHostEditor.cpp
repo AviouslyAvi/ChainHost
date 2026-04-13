@@ -182,7 +182,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     addAndMakeVisible (lfoPanel);
 
     chainViewport.setViewedComponent (&chainContainer, false);
-    chainViewport.setScrollBarsShown (true, false, true, false);
+    chainViewport.setScrollBarsShown (true, true, true, true);
     addAndMakeVisible (chainViewport);
 
     refreshChainView(); refreshMacroLabels();
@@ -214,8 +214,9 @@ void ChainHostEditor::timerCallback()
 
     // Auto-hide scrollbar logic
     auto& vsb = chainViewport.getVerticalScrollBar();
+    auto& hsb = chainViewport.getHorizontalScrollBar();
     bool isMouseOver = chainViewport.isMouseOver (true);
-    bool isScrolling = vsb.isMouseButtonDown (true);
+    bool isScrolling = vsb.isMouseButtonDown (true) || hsb.isMouseButtonDown (true);
 
     if (isMouseOver || isScrolling) {
         scrollIdleCounter = 0;
@@ -226,6 +227,7 @@ void ChainHostEditor::timerCallback()
             scrollAlpha = std::max (0.0f, scrollAlpha - 0.1f);
     }
     vsb.setAlpha (scrollAlpha);
+    hsb.setAlpha (scrollAlpha);
 
     lfoPanel.updatePhase();
 
@@ -283,6 +285,27 @@ void ChainHostEditor::ChainContainer::resized()
         for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 140, 84); px += 146; }
         row->addToChainButton.setBounds (px + 4, y + 28, 30, 30);
         row->removeChainButton.setBounds (getWidth() - 30, y + 32, 22, 22);
+    }
+}
+
+void ChainHostEditor::ChainContainer::mouseWheelMove (const juce::MouseEvent& e,
+                                                       const juce::MouseWheelDetails& wheel)
+{
+    if (auto* vp = findParentComponentOfClass<juce::Viewport>())
+    {
+        if (e.mods.isShiftDown())
+        {
+            // Shift+scroll → horizontal scroll
+            auto pos = vp->getViewPosition();
+            int delta = juce::roundToInt (wheel.deltaY * 300.0f);
+            pos.x = juce::jlimit (0, juce::jmax (0, getWidth() - vp->getWidth()), pos.x - delta);
+            vp->setViewPosition (pos);
+        }
+        else
+        {
+            // Normal scroll → vertical
+            Component::mouseWheelMove (e, wheel);
+        }
     }
 }
 
@@ -392,7 +415,14 @@ void ChainHostEditor::resized()
     chainViewport.setBounds (0, chainTop, getWidth(), macroTop - chainTop);
 
     auto& cg = proc.getChainGraph();
-    chainContainer.setSize (getWidth(), cg.getNumChains() * 88);
+    int maxW = getWidth();
+    for (int ci = 0; ci < cg.getNumChains(); ++ci)
+    {
+        int numSlots = (int) cg.getChain (ci).slots.size();
+        int rowW = 100 + numSlots * 146 + 40 + 40; // slots + add btn + remove btn margin
+        if (rowW > maxW) maxW = rowW;
+    }
+    chainContainer.setSize (maxW, cg.getNumChains() * 88);
 
     int macroStripW = 160;
     int cellW = macroStripW / 2;
