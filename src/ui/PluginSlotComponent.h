@@ -15,6 +15,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
 
     bool isInterestedInDragSource (const SourceDetails&) override { return true; }
@@ -32,6 +33,7 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId;
     int chainIndex, slotIndex;
     bool dragHover = false;
+    juce::Point<int> dragStartPos;
     juce::TextButton bypassButton { "ON" };
     juce::Label nameLabel;
     ArcKnob dryWetKnob;

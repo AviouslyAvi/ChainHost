@@ -780,13 +780,25 @@ void LfoPanel::checkLfoLearn()
 {
     if (! lfoLearning) return;
 
-    // Build a set of parameters already targeted by any LFO so we can skip them
+    // Build a set of parameters already modulated by any LFO or macro so we skip them
     auto& lfoEngine = proc.getLfoEngine();
-    std::set<std::pair<juce::uint32, int>> alreadyTargeted;
+    std::set<std::pair<juce::uint32, int>> alreadyModulated;
+
+    // LFO direct targets
     for (int li = 0; li < LfoEngine::numLfos; ++li)
         for (auto& tgt : lfoEngine.getLfo (li).targets)
             if (tgt.type == LfoTarget::Parameter)
-                alreadyTargeted.insert ({ tgt.nodeId.uid, tgt.paramIndex });
+                alreadyModulated.insert ({ tgt.nodeId.uid, tgt.paramIndex });
+
+    // Macro-mapped params (macros continuously set their values via setValue)
+    auto& mm = proc.getMacroManager();
+    for (int mi = 0; mi < MacroManager::numMacros; ++mi)
+        for (auto& m : mm.getMappings (mi))
+        {
+            if (m.slotUid == InternalParams::uid) continue;
+            auto nid = proc.getChainGraph().getNodeIdForUid (m.slotUid);
+            alreadyModulated.insert ({ nid.uid, m.paramIndex });
+        }
 
     auto& cg = proc.getChainGraph();
     for (int ci = 0; ci < cg.getNumChains(); ++ci)
@@ -801,7 +813,7 @@ void LfoPanel::checkLfoLearn()
                 {
                     // Skip params already modulated by an LFO — their values
                     // change every tick and would cause false detections
-                    if (alreadyTargeted.count ({ slot.nodeId.uid, pi }))
+                    if (alreadyModulated.count ({ slot.nodeId.uid, pi }))
                         continue;
 
                     float oldVal = it->second[(size_t) pi];

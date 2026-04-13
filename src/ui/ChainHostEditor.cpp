@@ -182,7 +182,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     addAndMakeVisible (lfoPanel);
 
     chainViewport.setViewedComponent (&chainContainer, false);
-    chainViewport.setScrollBarsShown (true, false, true, true);
+    chainViewport.setScrollBarsShown (true, false, true, false);
     addAndMakeVisible (chainViewport);
 
     refreshChainView(); refreshMacroLabels();

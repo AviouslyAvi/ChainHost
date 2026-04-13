@@ -91,13 +91,24 @@ void PluginSlotComponent::resized()
 
 void PluginSlotComponent::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.x < 22 && e.y > 24)
+    // Store for drag detection
+    dragStartPos = e.getPosition();
+}
+
+void PluginSlotComponent::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.getDistanceFromDragStart() > 6)
+    {
         if (auto* dc = juce::DragAndDropContainer::findParentDragContainerFor (this))
         {
-            // Alt/Option held → copy; otherwise move
-            juce::String prefix = e.mods.isAltDown() ? "copy:" : "";
-            dc->startDragging (juce::var (prefix + juce::String (chainIndex) + ":" + juce::String (slotIndex)), this);
+            if (! dc->isDragAndDropActive())
+            {
+                // Alt/Option held → copy; otherwise move
+                juce::String prefix = e.mods.isAltDown() ? "copy:" : "";
+                dc->startDragging (juce::var (prefix + juce::String (chainIndex) + ":" + juce::String (slotIndex)), this);
+            }
         }
+    }
 }
 
 void PluginSlotComponent::mouseDoubleClick (const juce::MouseEvent&)
