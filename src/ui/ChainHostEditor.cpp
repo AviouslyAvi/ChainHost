@@ -282,7 +282,11 @@ void ChainHostEditor::ChainContainer::resized()
         int y = ci * 88;
         row->volumeKnob.setBounds (34, y + 4, 64, 80);
         int px = 100;
-        for (auto* slot : row->slotComponents) { slot->setBounds (px, y + 2, 140, 84); px += 146; }
+        for (auto* slot : row->slotComponents) {
+            int sw = slot->getDesiredWidth();
+            slot->setBounds (px, y + 2, sw, 84);
+            px += sw + 6;
+        }
         row->addToChainButton.setBounds (px + 4, y + 28, 30, 30);
         row->removeChainButton.setBounds (getWidth() - 30, y + 32, 22, 22);
     }
@@ -418,10 +422,13 @@ void ChainHostEditor::resized()
 
     auto& cg = proc.getChainGraph();
     int maxW = getWidth();
-    for (int ci = 0; ci < cg.getNumChains(); ++ci)
+    for (int ci = 0; ci < (int) chainContainer.chainRows.size(); ++ci)
     {
-        int numSlots = (int) cg.getChain (ci).slots.size();
-        int rowW = 100 + numSlots * 146 + 40 + 40; // slots + add btn + remove btn margin
+        auto* row = chainContainer.chainRows[ci];
+        int rowW = 100; // left margin (chain number + volume knob)
+        for (auto* slot : row->slotComponents)
+            rowW += slot->getDesiredWidth() + 6;
+        rowW += 40 + 40; // add btn + remove btn margin
         if (rowW > maxW) maxW = rowW;
     }
     chainContainer.setSize (maxW, cg.getNumChains() * 88);
@@ -493,6 +500,7 @@ void ChainHostEditor::refreshChainView()
             };
             comp->onMove = [this] (int fc, int fs, int tc, int ts) { proc.getChainGraph().movePlugin (proc.getGraph(), fc, fs, tc, ts); refreshChainView(); };
             comp->onCopy = [this] (int fc, int fs, int tc, int ts) { proc.getChainGraph().duplicatePlugin (proc.getGraph(), proc.getScanner(), fc, fs, tc, ts); refreshChainView(); };
+            comp->onLayoutChanged = [this]() { resized(); chainContainer.resized(); repaint(); };
             chainContainer.addAndMakeVisible (comp);
         }
     }
