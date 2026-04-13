@@ -42,12 +42,17 @@ FetchContent_GetProperties(melatonin_blur)
 if(NOT melatonin_blur_POPULATED)
     FetchContent_Populate(melatonin_blur)
 endif()
-# juce_add_module expects dir name == module name, so create a properly named symlink
+# juce_add_module expects dir name == module name; FetchContent uses *-src suffix
 set(MELATONIN_MODULES_ROOT "${CMAKE_BINARY_DIR}/_modules")
-set(MELATONIN_MODULE_DIR "${MELATONIN_MODULES_ROOT}/melatonin_blur")
 file(MAKE_DIRECTORY "${MELATONIN_MODULES_ROOT}")
-if(NOT EXISTS "${MELATONIN_MODULE_DIR}")
-    file(CREATE_LINK "${melatonin_blur_SOURCE_DIR}" "${MELATONIN_MODULE_DIR}" SYMBOLIC)
+set(MELATONIN_MODULE_DIR "${MELATONIN_MODULES_ROOT}/melatonin_blur")
+if(NOT EXISTS "${MELATONIN_MODULE_DIR}/melatonin_blur.h")
+    file(REMOVE_RECURSE "${MELATONIN_MODULE_DIR}")
+    file(CREATE_LINK "${melatonin_blur_SOURCE_DIR}" "${MELATONIN_MODULE_DIR}" SYMBOLIC COPY_ON_ERROR)
+    if(NOT EXISTS "${MELATONIN_MODULE_DIR}/melatonin_blur.h")
+        file(REMOVE_RECURSE "${MELATONIN_MODULE_DIR}")
+        file(COPY "${melatonin_blur_SOURCE_DIR}/" DESTINATION "${MELATONIN_MODULE_DIR}")
+    endif()
 endif()
 juce_add_module(${MELATONIN_MODULE_DIR})
 
@@ -62,8 +67,13 @@ if(NOT melatonin_inspector_POPULATED)
     FetchContent_Populate(melatonin_inspector)
 endif()
 set(INSPECTOR_MODULE_DIR "${MELATONIN_MODULES_ROOT}/melatonin_inspector")
-if(NOT EXISTS "${INSPECTOR_MODULE_DIR}")
-    file(CREATE_LINK "${melatonin_inspector_SOURCE_DIR}" "${INSPECTOR_MODULE_DIR}" SYMBOLIC)
+if(NOT EXISTS "${INSPECTOR_MODULE_DIR}/melatonin_inspector.h")
+    file(REMOVE_RECURSE "${INSPECTOR_MODULE_DIR}")
+    file(CREATE_LINK "${melatonin_inspector_SOURCE_DIR}" "${INSPECTOR_MODULE_DIR}" SYMBOLIC COPY_ON_ERROR)
+    if(NOT EXISTS "${INSPECTOR_MODULE_DIR}/melatonin_inspector.h")
+        file(REMOVE_RECURSE "${INSPECTOR_MODULE_DIR}")
+        file(COPY "${melatonin_inspector_SOURCE_DIR}/" DESTINATION "${INSPECTOR_MODULE_DIR}")
+    endif()
 endif()
 juce_add_module(${INSPECTOR_MODULE_DIR})
 
@@ -74,12 +84,12 @@ juce_add_plugin(ChainHost
     PLUGIN_CODE               ChHo
     FORMATS                   VST3 Standalone
     PRODUCT_NAME              "ChainHost"
-    IS_SYNTH                  TRUE
+    IS_SYNTH                  FALSE
     NEEDS_MIDI_INPUT          TRUE
     NEEDS_MIDI_OUTPUT         TRUE
     IS_MIDI_EFFECT            FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS TRUE
-    COPY_PLUGIN_AFTER_BUILD   TRUE
+    COPY_PLUGIN_AFTER_BUILD   FALSE
 )
 
 target_sources(ChainHost PRIVATE
@@ -97,8 +107,10 @@ target_sources(ChainHost PRIVATE
     src/ui/LfoWaveformEditor.cpp
     src/ui/LfoPanel.cpp
     src/ui/ChainHostEditor.cpp
-    src/ui/PluginWindowMac.mm
 )
+if(APPLE)
+    target_sources(ChainHost PRIVATE src/ui/PluginWindowMac.mm)
+endif()
 
 target_compile_definitions(ChainHost PUBLIC
     JUCE_PLUGINHOST_VST3=1

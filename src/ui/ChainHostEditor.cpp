@@ -182,7 +182,7 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     addAndMakeVisible (lfoPanel);
 
     chainViewport.setViewedComponent (&chainContainer, false);
-    chainViewport.setScrollBarsShown (true, false, true, false);
+    chainViewport.setScrollBarsShown (true, true, true, true);
     addAndMakeVisible (chainViewport);
 
     refreshChainView(); refreshMacroLabels();
@@ -392,7 +392,12 @@ void ChainHostEditor::resized()
     chainViewport.setBounds (0, chainTop, getWidth(), macroTop - chainTop);
 
     auto& cg = proc.getChainGraph();
-    chainContainer.setSize (getWidth(), cg.getNumChains() * 88);
+    int maxRowWidth = getWidth();
+    for (int ci = 0; ci < cg.getNumChains(); ++ci) {
+        int rowW = 100 + (int)cg.getChain (ci).slots.size() * 146 + 40;
+        if (rowW > maxRowWidth) maxRowWidth = rowW;
+    }
+    chainContainer.setSize (maxRowWidth, cg.getNumChains() * 88);
 
     int macroStripW = 160;
     int cellW = macroStripW / 2;
