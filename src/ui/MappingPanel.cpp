@@ -1,5 +1,6 @@
 #include "MappingPanel.h"
 #include "../PluginProcessor.h"
+#include <set>
 
 MappingPanel::MappingPanel (ChainHostProcessor& p) : proc (p)
 {
@@ -140,6 +141,22 @@ void MappingPanel::takeParamSnapshot() {
 
 void MappingPanel::checkLearn() {
     if (learningMacroIndex < 0) return;
+
+    // Build set of params already targeted by any LFO — skip them to avoid false detections
+    auto& lfoEngine = proc.getLfoEngine();
+    std::set<std::pair<juce::uint32, int>> lfoTargeted;
+    for (int li = 0; li < LfoEngine::numLfos; ++li)
+        for (auto& tgt : lfoEngine.getLfo (li).targets)
+            if (tgt.type == LfoTarget::Parameter)
+                lfoTargeted.insert ({ tgt.nodeId.uid, tgt.paramIndex });
+
+    // Also skip params already mapped to any macro
+    auto& mm = proc.getMacroManager();
+    std::set<std::pair<std::string, int>> macroMapped;
+    for (int mi = 0; mi < MacroManager::numMacros; ++mi)
+        for (auto& m : mm.getMappings (mi))
+            macroMapped.insert ({ m.slotUid.toStdString(), m.paramIndex });
+
     float bestDelta = 0; juce::AudioProcessorGraph::NodeID bestNode {}; int bestParam = -1;
     bool bestIsInternal = false; int bestInternalIdx = -1;
     for (auto& snap : learnSnapshot)
@@ -147,11 +164,19 @@ void MappingPanel::checkLearn() {
         if (snap.paramIndex < 0) {
             // Internal param: paramIndex is -(ip+1)
             int ip = -(snap.paramIndex + 1);
-            float cur = InternalParams::getParamValue (ip, proc.getLfoEngine());
+            float cur = InternalParams::getParamValue (ip, lfoEngine);
             float d = std::abs (cur - snap.value);
             if (d > bestDelta) { bestDelta = d; bestIsInternal = true; bestInternalIdx = ip; }
         }
         else if (auto* node = proc.getGraph().getNodeForId (snap.nodeId)) {
+            // Skip if already targeted by an LFO
+            if (lfoTargeted.count ({ snap.nodeId.uid, snap.paramIndex }))
+                continue;
+            // Skip if already mapped to a macro
+            auto uid = proc.getChainGraph().getUidForNodeId (snap.nodeId);
+            if (macroMapped.count ({ uid.toStdString(), snap.paramIndex }))
+                continue;
+
             auto& params = node->getProcessor()->getParameters();
             if (snap.paramIndex < params.size()) {
                 float d = std::abs (params[snap.paramIndex]->getValue() - snap.value);

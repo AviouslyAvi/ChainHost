@@ -2,6 +2,7 @@
 // LfoPanel — Serum-style LFO control panel with 4 LFOs
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <set>
 #include <vector>
 #include "Colors.h"
 #include "ArcKnob.h"

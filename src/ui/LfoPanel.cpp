@@ -778,6 +778,15 @@ void LfoPanel::stopLfoLearn()
 void LfoPanel::checkLfoLearn()
 {
     if (! lfoLearning) return;
+
+    // Build a set of parameters already targeted by any LFO so we can skip them
+    auto& lfoEngine = proc.getLfoEngine();
+    std::set<std::pair<juce::uint32, int>> alreadyTargeted;
+    for (int li = 0; li < LfoEngine::numLfos; ++li)
+        for (auto& tgt : lfoEngine.getLfo (li).targets)
+            if (tgt.type == LfoTarget::Parameter)
+                alreadyTargeted.insert ({ tgt.nodeId.uid, tgt.paramIndex });
+
     auto& cg = proc.getChainGraph();
     for (int ci = 0; ci < cg.getNumChains(); ++ci)
         for (auto& slot : cg.getChain (ci).slots)
@@ -789,6 +798,11 @@ void LfoPanel::checkLfoLearn()
                 auto& params = node->getProcessor()->getParameters();
                 for (int pi = 0; pi < params.size() && pi < (int) it->second.size(); ++pi)
                 {
+                    // Skip params already modulated by an LFO — their values
+                    // change every tick and would cause false detections
+                    if (alreadyTargeted.count ({ slot.nodeId.uid, pi }))
+                        continue;
+
                     float oldVal = it->second[(size_t) pi];
                     float newVal = params[pi]->getValue();
                     if (std::abs (newVal - oldVal) > 0.01f)
@@ -797,7 +811,7 @@ void LfoPanel::checkLfoLearn()
                         t.type = LfoTarget::Parameter;
                         t.nodeId = slot.nodeId;
                         t.paramIndex = pi;
-                        proc.getLfoEngine().addTarget (activeLfo, t);
+                        lfoEngine.addTarget (activeLfo, t);
                         stopLfoLearn();
                         refresh();
                         return;
