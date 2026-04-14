@@ -1,5 +1,9 @@
 #include "PluginWindow.h"
 
+#if __APPLE__
+extern "C" void attachChildWindowToParent (void* childHandle, void* parentHandle);
+#endif
+
 PluginWindow::PluginWindow (const juce::String& name, juce::AudioProcessorGraph::NodeID nid,
                             juce::AudioProcessorEditor* editor,
                             juce::Component* parentComp,
@@ -7,7 +11,6 @@ PluginWindow::PluginWindow (const juce::String& name, juce::AudioProcessorGraph:
     : DocumentWindow (name, Colors::surface, DocumentWindow::closeButton),
       nodeId (nid), closeCallback (std::move (onClose))
 {
-    juce::ignoreUnused (parentComp);
     setContentOwned (editor, true);
     setResizable (false, false);
     setDropShadowEnabled (true);
@@ -18,6 +21,16 @@ PluginWindow::PluginWindow (const juce::String& name, juce::AudioProcessorGraph:
                 | juce::ComponentPeer::windowHasCloseButton);
     setVisible (true);
     toFront (true);
+
+   #if __APPLE__
+    if (parentComp != nullptr)
+        if (auto* parentPeer = parentComp->getPeer())
+            if (auto* childPeer = getPeer())
+                attachChildWindowToParent (childPeer->getNativeHandle(),
+                                           parentPeer->getNativeHandle());
+   #else
+    juce::ignoreUnused (parentComp);
+   #endif
 }
 
 void PluginWindow::closeButtonPressed()

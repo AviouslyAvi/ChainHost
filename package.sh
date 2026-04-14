@@ -33,6 +33,7 @@ fi
 
 APP_PATH="$BUILD_DIR/ChainHost_artefacts/Standalone/ChainHost.app"
 VST3_PATH="$BUILD_DIR/ChainHost_artefacts/VST3/ChainHost.vst3"
+VST3FX_PATH="$BUILD_DIR/ChainHostFX_artefacts/VST3/ChainHost FX.vst3"
 
 if [[ ! -d "$APP_PATH" ]]; then
     echo "ERROR: Standalone app not found at $APP_PATH"
@@ -40,6 +41,10 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 if [[ ! -d "$VST3_PATH" ]]; then
     echo "ERROR: VST3 not found at $VST3_PATH"
+    exit 1
+fi
+if [[ ! -d "$VST3FX_PATH" ]]; then
+    echo "ERROR: VST3 FX not found at $VST3FX_PATH"
     exit 1
 fi
 
@@ -50,6 +55,7 @@ mkdir -p "$STAGING"
 
 cp -R "$APP_PATH" "$STAGING/ChainHost.app"
 cp -R "$VST3_PATH" "$STAGING/ChainHost.vst3"
+cp -R "$VST3FX_PATH" "$STAGING/ChainHost FX.vst3"
 
 # Symlinks for drag-and-drop install
 ln -s /Applications "$STAGING/Applications"
@@ -59,6 +65,7 @@ ln -s "$HOME/Library/Audio/Plug-Ins/VST3" "$STAGING/VST3 Plug-Ins"
 echo ">> Code signing (ad-hoc)..."
 codesign --force --deep --sign - "$STAGING/ChainHost.app" 2>/dev/null || true
 codesign --force --deep --sign - "$STAGING/ChainHost.vst3" 2>/dev/null || true
+codesign --force --deep --sign - "$STAGING/ChainHost FX.vst3" 2>/dev/null || true
 
 # ── Create DMG ────────────────────────────────────────────────────
 DMG_OUTPUT="$BUILD_DIR/${DMG_NAME}.dmg"
@@ -96,3 +103,4 @@ echo "To install:"
 echo "  1. Open the DMG"
 echo "  2. Drag ChainHost.app → Applications"
 echo "  3. Drag ChainHost.vst3 → VST3 Plug-Ins"
+echo "  4. Drag ChainHost FX.vst3 → VST3 Plug-Ins"

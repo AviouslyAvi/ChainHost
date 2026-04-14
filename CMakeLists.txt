@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(ChainHost VERSION 0.2.0)
+project(ChainHost VERSION 0.3.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,22 +75,8 @@ if(NOT EXISTS "${INSPECTOR_MODULE_DIR}/melatonin_inspector.h")
 endif()
 juce_add_module(${INSPECTOR_MODULE_DIR})
 
-# ── Plugin target ─────────────────────────────────────────────
-juce_add_plugin(ChainHost
-    COMPANY_NAME              "Avious"
-    PLUGIN_MANUFACTURER_CODE  Avii
-    PLUGIN_CODE               ChHo
-    FORMATS                   VST3 Standalone
-    PRODUCT_NAME              "ChainHost"
-    IS_SYNTH                  TRUE
-    NEEDS_MIDI_INPUT          TRUE
-    NEEDS_MIDI_OUTPUT         TRUE
-    IS_MIDI_EFFECT            FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
-    COPY_PLUGIN_AFTER_BUILD   TRUE
-)
-
-target_sources(ChainHost PRIVATE
+# ── Shared source list ────────────────────────────────────────
+set(CHAINHOST_SOURCES
     src/PluginProcessor.cpp
     src/PluginScanner.cpp
     src/ChainGraph.cpp
@@ -109,7 +95,7 @@ target_sources(ChainHost PRIVATE
     src/ui/PluginWindowMac.mm
 )
 
-target_compile_definitions(ChainHost PUBLIC
+set(CHAINHOST_COMPILE_DEFS
     GIN_HAS_SIMD=0
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_VST=0
@@ -119,29 +105,68 @@ target_compile_definitions(ChainHost PUBLIC
     JUCE_DISPLAY_SPLASH_SCREEN=1
 )
 
-target_link_libraries(ChainHost
-    PRIVATE
-        juce::juce_audio_basics
-        juce::juce_audio_devices
-        juce::juce_audio_formats
-        juce::juce_audio_plugin_client
-        juce::juce_audio_processors
-        juce::juce_audio_utils
-        juce::juce_core
-        juce::juce_data_structures
-        juce::juce_events
-        juce::juce_graphics
-        juce::juce_gui_basics
-        juce::juce_gui_extra
-        gin
-        gin_simd
-        gin_dsp
-        gin_gui
-        gin_graphics
-        gin_plugin
-        melatonin_blur
-        melatonin_inspector
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_warning_flags
+set(CHAINHOST_LINK_PRIVATE
+    juce::juce_audio_basics
+    juce::juce_audio_devices
+    juce::juce_audio_formats
+    juce::juce_audio_plugin_client
+    juce::juce_audio_processors
+    juce::juce_audio_utils
+    juce::juce_core
+    juce::juce_data_structures
+    juce::juce_events
+    juce::juce_graphics
+    juce::juce_gui_basics
+    juce::juce_gui_extra
+    gin
+    gin_simd
+    gin_dsp
+    gin_gui
+    gin_graphics
+    gin_plugin
+    melatonin_blur
+    melatonin_inspector
 )
+
+set(CHAINHOST_LINK_PUBLIC
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags
+)
+
+# ── Plugin target (Instrument) ────────────────────────────────
+juce_add_plugin(ChainHost
+    COMPANY_NAME              "Avious"
+    PLUGIN_MANUFACTURER_CODE  Avii
+    PLUGIN_CODE               ChHo
+    FORMATS                   VST3 Standalone
+    PRODUCT_NAME              "ChainHost"
+    IS_SYNTH                  TRUE
+    NEEDS_MIDI_INPUT          TRUE
+    NEEDS_MIDI_OUTPUT         TRUE
+    IS_MIDI_EFFECT            FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+    COPY_PLUGIN_AFTER_BUILD   TRUE
+)
+
+target_sources(ChainHost PRIVATE ${CHAINHOST_SOURCES})
+target_compile_definitions(ChainHost PUBLIC ${CHAINHOST_COMPILE_DEFS})
+target_link_libraries(ChainHost PRIVATE ${CHAINHOST_LINK_PRIVATE} PUBLIC ${CHAINHOST_LINK_PUBLIC})
+
+# ── Plugin target (Effect) ────────────────────────────────────
+juce_add_plugin(ChainHostFX
+    COMPANY_NAME              "Avious"
+    PLUGIN_MANUFACTURER_CODE  Avii
+    PLUGIN_CODE               ChFx
+    FORMATS                   VST3
+    PRODUCT_NAME              "ChainHost FX"
+    IS_SYNTH                  FALSE
+    NEEDS_MIDI_INPUT          TRUE
+    NEEDS_MIDI_OUTPUT         TRUE
+    IS_MIDI_EFFECT            FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+    COPY_PLUGIN_AFTER_BUILD   TRUE
+)
+
+target_sources(ChainHostFX PRIVATE ${CHAINHOST_SOURCES})
+target_compile_definitions(ChainHostFX PUBLIC ${CHAINHOST_COMPILE_DEFS})
+target_link_libraries(ChainHostFX PRIVATE ${CHAINHOST_LINK_PRIVATE} PUBLIC ${CHAINHOST_LINK_PUBLIC})

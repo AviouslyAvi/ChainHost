@@ -638,7 +638,8 @@ void ChainHostEditor::openPluginWindow (juce::AudioProcessorGraph::NodeID nodeId
     auto now = juce::Time::getMillisecondCounter();
     auto it = windowCloseTimestamps.find (nodeId.uid);
     if (it != windowCloseTimestamps.end()) { if ((now - it->second) < kReopenCooldownMs) return; windowCloseTimestamps.erase (it); }
-    for (auto* win : pluginWindows) if (win->getNodeId() == nodeId) { win->toFront (true); return; }
+    for (int i = pluginWindows.size(); --i >= 0;)
+        if (pluginWindows[i]->getNodeId() == nodeId) { pluginWindows[i]->clearContentComponent(); pluginWindows.remove (i); return; }
     auto* node = proc.getGraph().getNodeForId (nodeId);
     if (!node) return;
     auto* plugProc = node->getProcessor();
