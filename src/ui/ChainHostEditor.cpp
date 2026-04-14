@@ -16,8 +16,26 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
 
     scanButton.onClick = [this]() {
         scanButton.setButtonText ("..."); scanButton.setEnabled (false);
-        proc.getScanner().onScanComplete = [this]() { scanButton.setButtonText ("SCAN"); scanButton.setEnabled (true); };
-        proc.getScanner().scan();
+        scanProgressPanel.startScan();
+        scanProgressPanel.setVisible (true);
+        resized();
+
+        auto& scanner = proc.getScanner();
+
+        scanner.onScanProgress = [this] (float p, const juce::String& name) {
+            scanProgressPanel.updateProgress (p, name);
+        };
+
+        scanner.onScanFinished = [this] (int numFound, const juce::StringArray& failed) {
+            scanProgressPanel.showSummary (numFound, failed);
+        };
+
+        scanner.onScanComplete = [this]() {
+            scanButton.setButtonText ("SCAN");
+            scanButton.setEnabled (true);
+        };
+
+        scanner.scan();
     };
     addPluginButton.onClick = [this]() { showPluginMenu (0); };
     addChainButton.onClick = [this]() { proc.getChainGraph().addParallelChain (proc.getGraph()); refreshChainView(); };
@@ -41,6 +59,13 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
         refreshMacroLabels();
     };
     addAndMakeVisible (presetBrowser);
+
+    scanProgressPanel.setVisible (false);
+    scanProgressPanel.onDismissed = [this]() {
+        scanProgressPanel.setVisible (false);
+        resized();
+    };
+    addAndMakeVisible (scanProgressPanel);
 
     juce::Colour macroColours[] = {
         Colors::accent, Colors::accentBright, juce::Colour (0xffcc6644), juce::Colour (0xffdd8855),
@@ -415,7 +440,12 @@ void ChainHostEditor::resized()
     presetsToggle.setBounds (getWidth() - 82, 12, 70, 24);
 
     int chainTop = 48;
-    if (presetBrowserOpen) { presetBrowser.setBounds (0, 48, getWidth(), 140); chainTop = 188; }
+    if (scanProgressPanel.isVisible())
+    {
+        scanProgressPanel.setBounds (0, chainTop, getWidth(), ScanProgressPanel::kPanelHeight);
+        chainTop += ScanProgressPanel::kPanelHeight;
+    }
+    if (presetBrowserOpen) { presetBrowser.setBounds (0, chainTop, getWidth(), 140); chainTop += 140; }
 
     int macroTop = getHeight() - 440;
     chainViewport.setBounds (0, chainTop, getWidth(), macroTop - chainTop);

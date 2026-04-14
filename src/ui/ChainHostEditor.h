@@ -11,6 +11,7 @@
 #include "PresetBrowser.h"
 #include "MappingPanel.h"
 #include "LfoPanel.h"
+#include "ScanProgressPanel.h"
 #include "../PluginProcessor.h"
 
 class ChainHostEditor : public juce::AudioProcessorEditor,
@@ -38,6 +39,7 @@ private:
                      addChainButton { "+ CHAIN" }, presetsToggle { "PRESETS" };
     PresetBrowser presetBrowser;
     bool presetBrowserOpen = false;
+    ScanProgressPanel scanProgressPanel;
 
     struct ChainViewRow {
         juce::OwnedArray<PluginSlotComponent> slotComponents;

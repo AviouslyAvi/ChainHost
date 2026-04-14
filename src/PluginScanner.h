@@ -19,6 +19,8 @@ public:
     void loadFromCache();
 
     std::function<void()> onScanComplete;
+    std::function<void (float progress, const juce::String& pluginName)> onScanProgress;
+    std::function<void (int numFound, const juce::StringArray& failedFiles)> onScanFinished;
 
 private:
     void timerCallback() override;
@@ -27,6 +29,7 @@ private:
     juce::KnownPluginList knownPlugins;
     std::unique_ptr<juce::PluginDirectoryScanner> scanner;
     int currentFormatIndex = 0;
+    juce::StringArray failedFiles;
 
     juce::File getCacheFile() const;
     void startNextFormat();

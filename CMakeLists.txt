@@ -96,6 +96,7 @@ target_sources(ChainHost PRIVATE
     src/ui/MappingPanel.cpp
     src/ui/LfoWaveformEditor.cpp
     src/ui/LfoPanel.cpp
+    src/ui/ScanProgressPanel.cpp
     src/ui/ChainHostEditor.cpp
     src/ui/PluginWindowMac.mm
 )

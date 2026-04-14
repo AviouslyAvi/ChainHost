@@ -17,6 +17,7 @@ void PluginScanner::scan()
         return;
 
     currentFormatIndex = 0;
+    failedFiles.clear();
     startNextFormat();
 }
 
@@ -54,6 +55,11 @@ void PluginScanner::startNextFormat()
     // All formats done
     saveToCache();
 
+    if (onScanFinished)
+        onScanFinished (knownPlugins.getNumTypes(), failedFiles);
+
+    failedFiles.clear();
+
     if (onScanComplete)
         onScanComplete();
 }
@@ -73,6 +79,9 @@ void PluginScanner::timerCallback()
     {
         if (! scanner->scanNextFile (true, pluginName))
         {
+            // Accumulate failed files from this format before resetting scanner
+            failedFiles.addArray (scanner->getFailedFiles());
+
             // This format is done, move to next
             stopTimer();
             ++currentFormatIndex;
@@ -80,6 +89,9 @@ void PluginScanner::timerCallback()
             return;
         }
     }
+
+    if (onScanProgress)
+        onScanProgress (scanner->getProgress(), pluginName);
 }
 
 juce::File PluginScanner::getCacheFile() const
