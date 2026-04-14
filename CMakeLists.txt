@@ -46,8 +46,12 @@ endif()
 set(MELATONIN_MODULES_ROOT "${CMAKE_BINARY_DIR}/_modules")
 set(MELATONIN_MODULE_DIR "${MELATONIN_MODULES_ROOT}/melatonin_blur")
 file(MAKE_DIRECTORY "${MELATONIN_MODULES_ROOT}")
-if(NOT EXISTS "${MELATONIN_MODULE_DIR}")
-    file(CREATE_LINK "${melatonin_blur_SOURCE_DIR}" "${MELATONIN_MODULE_DIR}" SYMBOLIC)
+if(NOT EXISTS "${MELATONIN_MODULE_DIR}/melatonin_blur.h")
+    if(WIN32)
+        file(COPY "${melatonin_blur_SOURCE_DIR}/" DESTINATION "${MELATONIN_MODULE_DIR}")
+    else()
+        file(CREATE_LINK "${melatonin_blur_SOURCE_DIR}" "${MELATONIN_MODULE_DIR}" SYMBOLIC)
+    endif()
 endif()
 juce_add_module(${MELATONIN_MODULE_DIR})
 
@@ -62,8 +66,12 @@ if(NOT melatonin_inspector_POPULATED)
     FetchContent_Populate(melatonin_inspector)
 endif()
 set(INSPECTOR_MODULE_DIR "${MELATONIN_MODULES_ROOT}/melatonin_inspector")
-if(NOT EXISTS "${INSPECTOR_MODULE_DIR}")
-    file(CREATE_LINK "${melatonin_inspector_SOURCE_DIR}" "${INSPECTOR_MODULE_DIR}" SYMBOLIC)
+if(NOT EXISTS "${INSPECTOR_MODULE_DIR}/melatonin_inspector.h")
+    if(WIN32)
+        file(COPY "${melatonin_inspector_SOURCE_DIR}/" DESTINATION "${INSPECTOR_MODULE_DIR}")
+    else()
+        file(CREATE_LINK "${melatonin_inspector_SOURCE_DIR}" "${INSPECTOR_MODULE_DIR}" SYMBOLIC)
+    endif()
 endif()
 juce_add_module(${INSPECTOR_MODULE_DIR})
 
@@ -102,6 +110,7 @@ target_sources(ChainHost PRIVATE
 )
 
 target_compile_definitions(ChainHost PUBLIC
+    GIN_HAS_SIMD=0
     JUCE_PLUGINHOST_VST3=1
     JUCE_PLUGINHOST_VST=0
     JUCE_WEB_BROWSER=0
