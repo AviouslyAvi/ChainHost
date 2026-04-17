@@ -639,7 +639,7 @@ void ChainHostEditor::openPluginWindow (juce::AudioProcessorGraph::NodeID nodeId
     auto it = windowCloseTimestamps.find (nodeId.uid);
     if (it != windowCloseTimestamps.end()) { if ((now - it->second) < kReopenCooldownMs) return; windowCloseTimestamps.erase (it); }
     for (int i = pluginWindows.size(); --i >= 0;)
-        if (pluginWindows[i]->getNodeId() == nodeId) { pluginWindows[i]->clearContentComponent(); pluginWindows.remove (i); return; }
+        if (pluginWindows[i]->getNodeId() == nodeId) { pluginWindows[i]->clearContentComponent(); pluginWindows.remove (i); windowCloseTimestamps.erase (nodeId.uid); return; }
     auto* node = proc.getGraph().getNodeForId (nodeId);
     if (!node) return;
     auto* plugProc = node->getProcessor();

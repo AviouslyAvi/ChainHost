@@ -6,8 +6,11 @@ extern "C" void attachChildWindowToParent (void* childHandle, void* parentHandle
 void attachChildWindowToParent (void* childHandle, void* parentHandle)
 {
     if (childHandle == nullptr || parentHandle == nullptr) return;
-    NSWindow* child = (__bridge NSWindow*) childHandle;
-    NSWindow* parent = (__bridge NSWindow*) parentHandle;
+    NSView* childView = (__bridge NSView*) childHandle;
+    NSView* parentView = (__bridge NSView*) parentHandle;
+    NSWindow* child = [childView window];
+    NSWindow* parent = [parentView window];
+    if (child == nil || parent == nil || child == parent) return;
     [parent addChildWindow:child ordered:NSWindowAbove];
 }
 
