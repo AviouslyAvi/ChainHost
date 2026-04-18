@@ -467,7 +467,34 @@ juce::String LfoEngine::shapeName (Shape s)
 void LfoEngine::addTarget (int lfoIndex, const LfoTarget& t)
 {
     if (lfoIndex < 0 || lfoIndex >= numLfos) return;
+    // A plugin parameter may be modulated by at most one LFO, and never
+    // duplicated within the same LFO. Macro targets are allowed to be shared
+    // across LFOs (macros are shared modulators, not exclusive locks).
+    if (t.type == LfoTarget::Parameter)
+    {
+        for (int li = 0; li < numLfos; ++li)
+            for (auto& existing : lfos[li].targets)
+                if (existing.type == LfoTarget::Parameter
+                    && existing.nodeId == t.nodeId
+                    && existing.paramIndex == t.paramIndex)
+                    return; // already assigned somewhere
+    }
+    else if (t.type == LfoTarget::Macro)
+    {
+        for (auto& existing : lfos[lfoIndex].targets)
+            if (existing.type == LfoTarget::Macro && existing.macroIndex == t.macroIndex)
+                return; // duplicate on same LFO
+    }
     lfos[lfoIndex].targets.push_back (t);
+}
+
+bool LfoEngine::isParamAssigned (juce::AudioProcessorGraph::NodeID nodeId, int paramIndex) const
+{
+    for (int li = 0; li < numLfos; ++li)
+        for (auto& t : lfos[li].targets)
+            if (t.type == LfoTarget::Parameter && t.nodeId == nodeId && t.paramIndex == paramIndex)
+                return true;
+    return false;
 }
 
 void LfoEngine::removeTarget (int lfoIndex, int targetIndex)
@@ -567,7 +594,7 @@ void LfoEngine::fromXml (const juce::XmlElement& xml)
         lfo.shape         = (Shape) lx->getIntAttribute ("shape",   0);
         lfo.rate          = (float) lx->getDoubleAttribute ("rate", 1.0);
         lfo.depth         = (float) lx->getDoubleAttribute ("depth", 0.5);
-        lfo.tempoSync     = lx->getBoolAttribute   ("tempoSync",    false);
+        lfo.tempoSync     = lx->getBoolAttribute   ("tempoSync",    true);
         lfo.syncDiv       = (SyncDiv) lx->getIntAttribute ("syncDiv", Sync_1_4);
         lfo.retrigger     = lx->getBoolAttribute   ("retrigger",    true);
         lfo.unipolar      = lx->getBoolAttribute   ("unipolar",     true);

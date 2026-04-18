@@ -119,6 +119,7 @@ public:
 
     // Targets
     void addTarget (int lfoIndex, const LfoTarget& t);
+    bool isParamAssigned (juce::AudioProcessorGraph::NodeID nodeId, int paramIndex) const;
     void removeTarget (int lfoIndex, int targetIndex);
     void clearTargets (int lfoIndex);
     void removeTargetsForNode (juce::AudioProcessorGraph::NodeID nodeId);

@@ -810,6 +810,11 @@ void LfoPanel::checkLfoLearn()
                     // Always update the snapshot to track the rolling baseline
                     it->second[(size_t) pi] = curVal;
 
+                    // Skip params already assigned to any LFO — user must
+                    // unassign first before re-learning. Prevents re-capturing
+                    // already-modulated params on subsequent LFO learns.
+                    if (lfoEngine.isParamAssigned (slot.nodeId, pi)) continue;
+
                     if (delta > bestDelta)
                     {
                         bestDelta = delta;

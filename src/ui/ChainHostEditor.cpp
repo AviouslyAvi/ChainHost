@@ -26,8 +26,9 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
             scanProgressPanel.updateProgress (p, name);
         };
 
-        scanner.onScanFinished = [this] (int numFound, const juce::StringArray& failed) {
-            scanProgressPanel.showSummary (numFound, failed);
+        scanner.onScanFinished = [this] (int, const juce::StringArray&) {
+            scanProgressPanel.setVisible (false);
+            resized();
         };
 
         scanner.onScanComplete = [this]() {
@@ -60,20 +61,15 @@ ChainHostEditor::ChainHostEditor (ChainHostProcessor& p)
     };
     addAndMakeVisible (presetBrowser);
 
-    scanProgressPanel.setVisible (false);
     scanProgressPanel.onDismissed = [this]() {
         scanProgressPanel.setVisible (false);
         resized();
     };
-    addAndMakeVisible (scanProgressPanel);
+    addChildComponent (scanProgressPanel);
 
-    juce::Colour macroColours[] = {
-        Colors::accent, Colors::accentBright, juce::Colour (0xffcc6644), juce::Colour (0xffdd8855),
-        juce::Colour (0xffbb7744), juce::Colour (0xffcc9955), juce::Colour (0xffddaa66), juce::Colour (0xffeebb77)
-    };
     for (int i = 0; i < MacroManager::numMacros; ++i)
     {
-        macroKnobs[i].setArcColour (macroColours[i]);
+        macroKnobs[i].setArcColour (Colors::macroAccents[i]);
         macroKnobs[i].setDefaultValue (0.0f);
         macroKnobs[i].setShowPercentage (false);
         macroKnobs[i].setLabel ({});
@@ -342,13 +338,18 @@ void ChainHostEditor::ChainViewport::mouseWheelMove (const juce::MouseEvent& e,
 
 void ChainHostEditor::paint (juce::Graphics& g)
 {
+    constexpr int kHeaderH = 48;
+    constexpr int kBottomH = 440;
+    constexpr int kMacroColW = 160;
+    constexpr int kTargetsColW = 0;
+
     g.fillAll (Colors::bg);
 
     {
         g.setColour (Colors::surface);
-        g.fillRect (0, 0, getWidth(), 48);
+        g.fillRect (0, 0, getWidth(), kHeaderH);
         g.setColour (Colors::border);
-        g.drawLine (0, 48, (float)getWidth(), 48, 1.0f);
+        g.drawLine (0, (float) kHeaderH, (float) getWidth(), (float) kHeaderH, 1.0f);
 
         g.setColour (Colors::accent);
         g.setFont (juce::Font (juce::FontOptions (20.0f).withStyle ("Bold")));
@@ -358,8 +359,9 @@ void ChainHostEditor::paint (juce::Graphics& g)
         g.drawText ("v0.2", 138, 20, 30, 12, juce::Justification::centredLeft);
     }
 
-    int macroTop = getHeight() - 440;
-    int macroStripW = 160;
+    int macroTop = getHeight() - kBottomH;
+    int macroStripW = kMacroColW;
+    int targetsX = getWidth() - kTargetsColW;
 
     // Macro strip background
     g.setColour (Colors::bgDeep);
@@ -389,6 +391,11 @@ void ChainHostEditor::paint (juce::Graphics& g)
             // Cell border
             g.setColour (Colors::border.withAlpha (0.3f));
             g.drawRect (cx, cy, cellW, cellH, 1);
+            // Selected macro highlight
+            if (idx == selectedMacro) {
+                g.setColour (Colors::accent.withAlpha (0.45f));
+                g.drawRect (cx, cy, cellW, cellH, 1);
+            }
             // Macro number — top-left
             g.setColour (Colors::textDim.withAlpha (0.6f));
             g.setFont (juce::Font (juce::FontOptions (11.0f).withStyle ("Bold")));
@@ -426,20 +433,25 @@ void ChainHostEditor::paint (juce::Graphics& g)
     // Top border
     g.setColour (Colors::border);
     g.drawLine (0, (float)macroTop, (float)getWidth(), (float)macroTop, 1.0f);
-    // Right border
+    // Right border of macro strip
     g.setColour (Colors::border.withAlpha (0.4f));
     g.drawLine ((float)macroStripW, (float)macroTop, (float)macroStripW, (float)getHeight(), 1.0f);
 }
 
 void ChainHostEditor::resized()
 {
+    constexpr int kHeaderH = 48;
+    constexpr int kBottomH = 440;
+    constexpr int kMacroColW = 160;
+    constexpr int kTargetsColW = 0;
+
     int x = 180;
     scanButton.setBounds (x, 12, 52, 24); x += 58;
     addPluginButton.setBounds (x, 12, 80, 24); x += 86;
     addChainButton.setBounds (x, 12, 68, 24);
     presetsToggle.setBounds (getWidth() - 82, 12, 70, 24);
 
-    int chainTop = 48;
+    int chainTop = kHeaderH;
     if (scanProgressPanel.isVisible())
     {
         scanProgressPanel.setBounds (0, chainTop, getWidth(), ScanProgressPanel::kPanelHeight);
@@ -447,7 +459,8 @@ void ChainHostEditor::resized()
     }
     if (presetBrowserOpen) { presetBrowser.setBounds (0, chainTop, getWidth(), 140); chainTop += 140; }
 
-    int macroTop = getHeight() - 440;
+    int macroTop = getHeight() - kBottomH;
+    int targetsX = getWidth() - kTargetsColW;
     chainViewport.setBounds (0, chainTop, getWidth(), macroTop - chainTop);
 
     auto& cg = proc.getChainGraph();
@@ -463,7 +476,7 @@ void ChainHostEditor::resized()
     }
     chainContainer.setSize (maxW, cg.getNumChains() * 88);
 
-    int macroStripW = 160;
+    int macroStripW = kMacroColW;
     int cellW = macroStripW / 2;
     int cellH = (getHeight() - macroTop - 26) / 4;
     int gridTop = macroTop + 26;

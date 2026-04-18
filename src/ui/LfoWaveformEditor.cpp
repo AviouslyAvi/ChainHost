@@ -83,11 +83,11 @@ void LfoWaveformEditor::paint (juce::Graphics& g)
     auto b = getLocalBounds().toFloat();
 
     // Background
-    g.setColour (juce::Colour (0xff0e0e18));
+    g.setColour (Colors::surfaceRaised);
     g.fillRect (b);
 
     // Grid lines
-    g.setColour (juce::Colour (0x0cffffff));
+    g.setColour (Colors::borderSubtle);
     for (int gx = 1; gx < gridX; ++gx)
     {
         float xp = b.getX() + b.getWidth() * (float) gx / (float) gridX;

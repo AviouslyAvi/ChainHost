@@ -25,7 +25,7 @@ public:
 private:
     ChainHostProcessor& proc;
     int selectedMacro = 0, learningMacroIndex = -1;
-    struct ParamSnapshot { juce::AudioProcessorGraph::NodeID nodeId; int paramIndex; float value; };
+    struct ParamSnapshot { juce::AudioProcessorGraph::NodeID nodeId; int paramIndex; float value; float startValue; };
     std::vector<ParamSnapshot> learnSnapshot;
     juce::TextButton macroSelectButtons[MacroManager::numMacros];
     juce::TextButton mapButton { "+ MAP" }, learnButton { "LEARN" };

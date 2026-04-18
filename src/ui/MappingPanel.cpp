@@ -130,13 +130,16 @@ void MappingPanel::takeParamSnapshot() {
         for (auto& slot : cg.getChain (ci).slots)
             if (auto* node = proc.getGraph().getNodeForId (slot.nodeId)) {
                 auto& params = node->getProcessor()->getParameters();
-                for (int pi = 0; pi < params.size(); ++pi)
-                    learnSnapshot.push_back ({ slot.nodeId, pi, params[pi]->getValue() });
+                for (int pi = 0; pi < params.size(); ++pi) {
+                    float v = params[pi]->getValue();
+                    learnSnapshot.push_back ({ slot.nodeId, pi, v, v });
+                }
             }
     // Internal ChainHost parameters (LFO knobs)
-    for (int ip = 0; ip < InternalParams::NumParams; ++ip)
-        learnSnapshot.push_back ({ {}, -(ip + 1),
-            InternalParams::getParamValue (ip, proc.getLfoEngine()) });
+    for (int ip = 0; ip < InternalParams::NumParams; ++ip) {
+        float v = InternalParams::getParamValue (ip, proc.getLfoEngine());
+        learnSnapshot.push_back ({ {}, -(ip + 1), v, v });
+    }
 }
 
 void MappingPanel::checkLearn() {
@@ -146,28 +149,68 @@ void MappingPanel::checkLearn() {
     // modulation is smooth (small delta per 50ms tick), user interaction is sudden.
     static constexpr float kLearnThreshold = 0.08f;
 
+    // Collect params currently modulated by any enabled LFO — skip them so
+    // LFO modulation doesn't get learned as the user moving a param.
+    // Includes direct Parameter targets AND params reached via Macro targets.
+    std::set<std::pair<uint32_t, int>> lfoTargeted;
+    auto& lfoEng = proc.getLfoEngine();
+    auto& mm = proc.getMacroManager();
+    auto& cg = proc.getChainGraph();
+    for (int li = 0; li < LfoEngine::numLfos; ++li) {
+        auto& lfo = lfoEng.getLfo (li);
+        if (! lfo.enabled) continue;
+        for (auto& t : lfo.targets) {
+            if (t.type == LfoTarget::Parameter)
+                lfoTargeted.insert ({ t.nodeId.uid, t.paramIndex });
+            else if (t.type == LfoTarget::Macro) {
+                for (auto& m : mm.getMappings (t.macroIndex)) {
+                    if (m.slotUid == InternalParams::uid) continue;
+                    auto nid = cg.getNodeIdForUid (m.slotUid);
+                    lfoTargeted.insert ({ nid.uid, m.paramIndex });
+                }
+            }
+        }
+    }
+
+    // Fast move: large jump within one 50ms tick (rolling baseline).
+    // Slow move: cumulative drift from learn-start exceeds kDriftThreshold.
+    // LFO-targeted params are excluded from both checks.
+    static constexpr float kDriftThreshold = 0.05f;
+
     float bestDelta = 0; juce::AudioProcessorGraph::NodeID bestNode {}; int bestParam = -1;
     bool bestIsInternal = false; int bestInternalIdx = -1;
+    bool triggered = false;
     for (auto& snap : learnSnapshot)
     {
         if (snap.paramIndex < 0) {
             int ip = -(snap.paramIndex + 1);
             float cur = InternalParams::getParamValue (ip, proc.getLfoEngine());
-            float d = std::abs (cur - snap.value);
-            snap.value = cur; // update rolling baseline
-            if (d > bestDelta) { bestDelta = d; bestIsInternal = true; bestInternalIdx = ip; }
+            float tickDelta = std::abs (cur - snap.value);
+            float drift = std::abs (cur - snap.startValue);
+            snap.value = cur;
+            if (tickDelta > kLearnThreshold && tickDelta > bestDelta) {
+                bestDelta = tickDelta; bestIsInternal = true; bestInternalIdx = ip; triggered = true;
+            } else if (drift > kDriftThreshold && drift > bestDelta) {
+                bestDelta = drift; bestIsInternal = true; bestInternalIdx = ip; triggered = true;
+            }
         }
         else if (auto* node = proc.getGraph().getNodeForId (snap.nodeId)) {
             auto& params = node->getProcessor()->getParameters();
             if (snap.paramIndex < params.size()) {
                 float cur = params[snap.paramIndex]->getValue();
-                float d = std::abs (cur - snap.value);
-                snap.value = cur; // update rolling baseline
-                if (d > bestDelta) { bestDelta = d; bestNode = snap.nodeId; bestParam = snap.paramIndex; bestIsInternal = false; }
+                float tickDelta = std::abs (cur - snap.value);
+                float drift = std::abs (cur - snap.startValue);
+                snap.value = cur;
+                if (lfoTargeted.count ({ snap.nodeId.uid, snap.paramIndex })) continue;
+                if (tickDelta > kLearnThreshold && tickDelta > bestDelta) {
+                    bestDelta = tickDelta; bestNode = snap.nodeId; bestParam = snap.paramIndex; bestIsInternal = false; triggered = true;
+                } else if (drift > kDriftThreshold && drift > bestDelta) {
+                    bestDelta = drift; bestNode = snap.nodeId; bestParam = snap.paramIndex; bestIsInternal = false; triggered = true;
+                }
             }
         }
     }
-    if (bestDelta > kLearnThreshold) {
+    if (triggered) {
         if (bestIsInternal && bestInternalIdx >= 0) {
             proc.getMacroManager().addMapping (learningMacroIndex, InternalParams::uid, bestInternalIdx, 0.0f, 1.0f);
             setSelectedMacro (learningMacroIndex); stopLearn(); refresh();

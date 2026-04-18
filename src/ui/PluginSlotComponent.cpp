@@ -6,20 +6,16 @@ PluginSlotComponent::PluginSlotComponent (ChainHostProcessor& p, juce::AudioProc
 {
     bool active = !proc.getChainGraph().isSlotBypassed (nodeId);
 
-    // Orange power button (Ableton-style)
+    // V1 Candlelight: circular power dot. The TextButton has empty text and
+    // transparent fill — the dot itself is drawn procedurally in paintFull().
     powerButton.setToggleState (active, juce::dontSendNotification);
     powerButton.setClickingTogglesState (true);
-    powerButton.setButtonText (active ? "ON" : "OFF");
-    auto powerOn = Colors::accent;   // orange
-    powerButton.setColour (juce::TextButton::buttonColourId, active ? powerOn.withAlpha (0.7f) : Colors::surfaceRaised);
-    powerButton.setColour (juce::TextButton::textColourOffId, Colors::text);
-    powerButton.setColour (juce::TextButton::buttonOnColourId, powerOn.withAlpha (0.7f));
-    powerButton.setColour (juce::TextButton::textColourOnId, Colors::text);
+    powerButton.setButtonText ({});
+    powerButton.setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    powerButton.setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
     powerButton.onClick = [this]() {
         bool nowActive = powerButton.getToggleState();
         proc.getChainGraph().setSlotBypassed (proc.getGraph(), nodeId, !nowActive);
-        powerButton.setButtonText (nowActive ? "ON" : "OFF");
-        powerButton.setColour (juce::TextButton::buttonColourId, nowActive ? Colors::accent.withAlpha (0.7f) : Colors::surfaceRaised);
         accentGlow = nowActive
             ? melatonin::DropShadow { { Colors::accent.withAlpha (0.25f), 10, { 0, 0 }, 2 } }
             : melatonin::DropShadow {};
@@ -96,46 +92,80 @@ void PluginSlotComponent::paint (juce::Graphics& g)
 
 void PluginSlotComponent::paintFull (juce::Graphics& g, juce::Rectangle<float> bounds, bool isBypassed)
 {
-    // Card background
-    g.setColour (isBypassed ? Colors::slotBg : Colors::surfaceRaised);
-    g.fillRect (bounds);
+    constexpr float corner = 4.0f;
+    auto fullBounds = getLocalBounds().toFloat().reduced (2);
 
-    // Header bar
-    auto header = bounds.removeFromTop ((float) headerHeight);
-    g.setColour (isBypassed ? Colors::slotBg.brighter (0.05f) : Colors::surface);
-    g.fillRect (header);
+    // Card background (rounded)
+    g.setColour (isBypassed ? Colors::bgDeep : Colors::surfaceRaised);
+    g.fillRoundedRectangle (fullBounds, corner);
 
-    // Header bottom line
-    g.setColour (Colors::border.withAlpha (0.4f));
-    g.drawLine (header.getX(), header.getBottom(), header.getRight(), header.getBottom(), 1.0f);
+    // Header bar — clipped to card rounding via full-card path
+    {
+        juce::Path headerClip;
+        headerClip.addRoundedRectangle (fullBounds.getX(), fullBounds.getY(),
+                                        fullBounds.getWidth(), (float) headerHeight,
+                                        corner, corner, true, true, false, false);
+        g.setColour (isBypassed ? Colors::bgDeep.brighter (0.04f) : Colors::surface);
+        g.fillPath (headerClip);
+    }
+
+    // Header bottom hairline
+    g.setColour (Colors::borderSubtle.withAlpha (0.6f));
+    g.drawLine (fullBounds.getX() + 1.0f, fullBounds.getY() + headerHeight,
+                fullBounds.getRight() - 1.0f, fullBounds.getY() + headerHeight, 1.0f);
 
     // Card border
-    auto fullBounds = getLocalBounds().toFloat().reduced (2);
     g.setColour (isBypassed ? Colors::borderSubtle : Colors::slotBorder);
-    g.drawRect (fullBounds, 1.0f);
+    g.drawRoundedRectangle (fullBounds, corner, 1.0f);
 
-    // Active accent stripe on left
+    // Active accent stripe on left (2px, rounded at top-left/bottom-left)
     if (!isBypassed)
     {
+        juce::Path stripe;
+        stripe.addRoundedRectangle (fullBounds.getX(), fullBounds.getY(), 2.0f, fullBounds.getHeight(),
+                                    corner, corner, true, false, true, false);
         g.setColour (Colors::accent);
-        g.fillRect (fullBounds.getX(), fullBounds.getY(), 3.0f, fullBounds.getHeight());
+        g.fillPath (stripe);
+    }
+
+    // Circular power LED — painted over the invisible powerButton
+    auto pb = powerButton.getBounds().toFloat();
+    const float dotR = 4.0f;
+    float dotCx = pb.getCentreX();
+    float dotCy = pb.getCentreY();
+    if (!isBypassed)
+    {
+        g.setColour (Colors::accent.withAlpha (0.35f));
+        g.fillEllipse (dotCx - dotR - 2.0f, dotCy - dotR - 2.0f, (dotR + 2.0f) * 2.0f, (dotR + 2.0f) * 2.0f);
+        g.setColour (Colors::accent);
+        g.fillEllipse (dotCx - dotR, dotCy - dotR, dotR * 2.0f, dotR * 2.0f);
+    }
+    else
+    {
+        g.setColour (Colors::textDim);
+        g.drawEllipse (dotCx - dotR, dotCy - dotR, dotR * 2.0f, dotR * 2.0f, 1.0f);
     }
 }
 
 void PluginSlotComponent::paintCollapsed (juce::Graphics& g, juce::Rectangle<float> bounds, bool isBypassed)
 {
-    // Slim vertical strip
-    g.setColour (isBypassed ? Colors::slotBg : Colors::surfaceRaised);
-    g.fillRect (bounds);
+    constexpr float corner = 4.0f;
+
+    // Slim vertical strip (rounded)
+    g.setColour (isBypassed ? Colors::bgDeep : Colors::surfaceRaised);
+    g.fillRoundedRectangle (bounds, corner);
 
     g.setColour (isBypassed ? Colors::borderSubtle : Colors::slotBorder);
-    g.drawRect (bounds, 1.0f);
+    g.drawRoundedRectangle (bounds, corner, 1.0f);
 
     // Active accent stripe at top
     if (!isBypassed)
     {
+        juce::Path stripe;
+        stripe.addRoundedRectangle (bounds.getX(), bounds.getY(), bounds.getWidth(), 2.0f,
+                                    corner, corner, true, true, false, false);
         g.setColour (Colors::accent);
-        g.fillRect (bounds.getX(), bounds.getY(), bounds.getWidth(), 3.0f);
+        g.fillPath (stripe);
     }
 
     // On/off dot
@@ -171,11 +201,11 @@ void PluginSlotComponent::resized()
     auto b = getLocalBounds().reduced (4);
     auto header = b.removeFromTop (headerHeight - 2);
 
-    // Header layout: [power 28x16] [name ...] [wrench 18x16] [remove 16x16]
-    powerButton.setBounds (header.getX() + 2, header.getY() + 1, 28, 16);
+    // Header layout: [power dot 14] [name ...] [wrench 18] [remove 16]
+    powerButton.setBounds (header.getX() + 4, header.getY() + 2, 14, 14);
     removeButton.setBounds (header.getRight() - 16, header.getY(), 16, 18);
     wrenchButton.setBounds (header.getRight() - 34, header.getY(), 18, 18);
-    nameLabel.setBounds (header.getX() + 34, header.getY(), header.getWidth() - 70, 18);
+    nameLabel.setBounds (header.getX() + 22, header.getY(), header.getWidth() - 58, 18);
 
     // Body: dry/wet knob
     dryWetKnob.setBounds (b.getRight() - 48, b.getY() + headerHeight - 2, 44, 54);

@@ -86,9 +86,15 @@ void ArcKnob::paint (juce::Graphics& g)
             modArc.addCentredArc (cx, cy, haloR, haloR, 0.0f,
                                   fromA, toA, true);
 
-            // Thin blue line
-            g.setColour (Colors::lfoBlue.withAlpha (0.85f));
-            g.strokePath (modArc, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved,
+            // 3-layer teal glow halo — outer soft, mid, inner crisp
+            g.setColour (Colors::lfoBlue.withAlpha (0.25f));
+            g.strokePath (modArc, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved,
+                                                         juce::PathStrokeType::rounded));
+            g.setColour (Colors::lfoBlue.withAlpha (0.55f));
+            g.strokePath (modArc, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved,
+                                                         juce::PathStrokeType::rounded));
+            g.setColour (Colors::lfoBlue);
+            g.strokePath (modArc, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved,
                                                          juce::PathStrokeType::rounded));
         }
     }
