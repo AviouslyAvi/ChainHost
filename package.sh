@@ -31,9 +31,17 @@ else
     echo ">> Skipping build (--skip-build)"
 fi
 
-APP_PATH="$BUILD_DIR/ChainHost_artefacts/Standalone/ChainHost.app"
-VST3_PATH="$BUILD_DIR/ChainHost_artefacts/VST3/ChainHost.vst3"
-VST3FX_PATH="$BUILD_DIR/ChainHostFX_artefacts/VST3/ChainHost FX.vst3"
+# Artefact layout differs by CMake generator: Xcode uses Release/ subdir,
+# Unix Makefiles / Ninja put artefacts at the root of the artefacts dir.
+if [[ -d "$BUILD_DIR/ChainHost_artefacts/Release/Standalone/ChainHost.app" ]]; then
+    APP_PATH="$BUILD_DIR/ChainHost_artefacts/Release/Standalone/ChainHost.app"
+    VST3_PATH="$BUILD_DIR/ChainHost_artefacts/Release/VST3/ChainHost.vst3"
+    VST3FX_PATH="$BUILD_DIR/ChainHostFX_artefacts/Release/VST3/ChainHost FX.vst3"
+else
+    APP_PATH="$BUILD_DIR/ChainHost_artefacts/Standalone/ChainHost.app"
+    VST3_PATH="$BUILD_DIR/ChainHost_artefacts/VST3/ChainHost.vst3"
+    VST3FX_PATH="$BUILD_DIR/ChainHostFX_artefacts/VST3/ChainHost FX.vst3"
+fi
 
 if [[ ! -d "$APP_PATH" ]]; then
     echo "ERROR: Standalone app not found at $APP_PATH"
